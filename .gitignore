@@ -1,10 +1,71 @@
-# Python-generated files
+# ==================
+# Python 相關
+# ==================
 __pycache__/
 *.py[oc]
+*.pyo
+*.pyc
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
+*.egg
 
-# Virtual environments
-.venv
+# ==================
+# 虛擬環境
+# ==================
+.venv/
+venv/
+env/
+ENV/
+
+# ==================
+# IDE 和編輯器
+# ==================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.pydevproject
+
+# ==================
+# 測試和覆蓋率
+# ==================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+coverage.xml
+
+# ==================
+# 依賴套件鎖定檔案
+# ==================
+# uv 會自動管理
+# requirements.lock
+
+# ==================
+# 日誌和臨時檔案
+# ==================
+*.log
+*.tmp
+*.temp
+*.pid
+
+# ==================
+# 環境變數檔案
+# ==================
+.env
+.env.local
+.env.*.local
+
+# ==================
+# OS 相關
+# ==================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
