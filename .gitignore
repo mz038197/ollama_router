@@ -62,6 +62,13 @@ coverage.xml
 .env.*.local
 
 # ==================
+# API 金鑰和配置
+# ==================
+# 配置目錄位於使用者主目錄，不應該在此提交
+# ~/.ollama_router/apikeyConfig.json - API 金鑰配置（包含機密資訊）
+# ~/.ollama_router/log_*.log - 日誌檔案（已在 *.log 規則中涵蓋）
+
+# ==================
 # OS 相關
 # ==================
 .DS_Store

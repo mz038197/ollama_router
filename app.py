@@ -11,6 +11,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from auth import ApiKeyConfig, RequestLogger
+
 
 # =========================
 # 可調整設定
@@ -46,6 +48,8 @@ class ChatCompletionsRequest(BaseModel):
     # 可額外接受其他 OpenAI 風格欄位，避免前端多傳就壞掉
     user: Optional[str] = None
     stop: Optional[Any] = None
+    # API 金鑰驗證
+    api_key: Optional[str] = None
 
 
 @dataclass
@@ -379,7 +383,44 @@ def sse(data_obj: dict[str, Any]) -> bytes:
     return f"data: {json.dumps(data_obj, ensure_ascii=False)}\n\n".encode("utf-8")
 
 
+def verify_and_log_request(req: ChatCompletionsRequest) -> tuple[bool, Optional[str]]:
+    """
+    驗證 API 金鑰並記錄請求
+    
+    Return: (is_valid, teacher_name)
+    """
+    # 如果未配置任何金鑰，則允許全部通過
+    if not api_key_config.is_enabled():
+        request_logger.log_validation_result(
+            teacher_name=None,
+            api_key=req.api_key or "未提供",
+            model=req.model,
+            messages=[m.model_dump() for m in req.messages],
+            is_valid=True,
+        )
+        return True, None
+
+    # 進行金鑰驗證
+    is_valid, teacher_name = api_key_config.verify_api_key(req.api_key or "")
+
+    # 記錄驗證結果
+    request_logger.log_validation_result(
+        teacher_name=teacher_name,
+        api_key=req.api_key or "未提供",
+        model=req.model,
+        messages=[m.model_dump() for m in req.messages],
+        is_valid=is_valid,
+    )
+
+    return is_valid, teacher_name
+
+
 router = OllamaRouter(BACKENDS)
+
+
+# 初始化 API 金鑰配置和日誌記錄器
+api_key_config = ApiKeyConfig()
+request_logger = RequestLogger()
 
 
 @asynccontextmanager
@@ -407,6 +448,13 @@ async def list_models():
 
 @app.post("/v1/chat/completions")
 async def chat_completions(req: ChatCompletionsRequest, request: Request):
+    # 驗證 API 金鑰並記錄請求
+    is_valid, teacher_name = verify_and_log_request(req)
+
+    # 如果金鑰驗證失敗且已配置了金鑰，則拒絕請求
+    if not is_valid and api_key_config.is_enabled():
+        raise HTTPException(status_code=401, detail="無效的 API 金鑰")
+
     if req.stream:
         generator = router.chat_completions_stream(req)
         return StreamingResponse(generator, media_type="text/event-stream")
