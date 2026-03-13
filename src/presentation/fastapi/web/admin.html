@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ollama Router - API 金鑰管理</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+            font-weight: 600;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .panel-body {
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .teachers-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .teacher-item {
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .teacher-item:hover {
+            background: #e9ecef;
+            transform: translateX(4px);
+        }
+
+        .teacher-item.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .teacher-item-name {
+            font-weight: 500;
+        }
+
+        .teacher-item-count {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .teacher-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-sm-danger {
+            background: rgba(220, 53, 69, 0.2);
+            color: #dc3545;
+        }
+
+        .btn-sm-danger:hover {
+            background: #dc3545;
+            color: white;
+        }
+
+        .keys-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .keys-table thead {
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .keys-table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .keys-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 14px;
+        }
+
+        .keys-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .key-value {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #666;
+            word-break: break-all;
+            max-width: 200px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-enabled {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-disabled {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .key-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .message {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .message.show {
+            display: block;
+            animation: slideIn 0.3s ease-in;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show {
+            display: flex;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .switch {
+            display: inline-block;
+            position: relative;
+            width: 50px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #28a745;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔑 Ollama Router - API 金鑰管理</h1>
+            <p>管理教師和班級的 API 金鑰配置</p>
+        </div>
+
+        <div id="messageContainer"></div>
+
+        <div class="main-grid">
+            <!-- 左側面板 -->
+            <div class="panel">
+                <div class="panel-header">教師列表</div>
+                <div class="panel-body">
+                    <div class="form-group">
+                        <label>新增教師名稱</label>
+                        <div class="button-group">
+                            <input type="text" id="newTeacherName" placeholder="輸入教師名稱" />
+                            <button class="btn btn-primary" onclick="addTeacher()" style="flex: 0 0 auto; width: auto;">新增</button>
+                        </div>
+                    </div>
+
+                    <div class="teachers-list" id="teachersList">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📚</div>
+                            <p>還沒有教師</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右側面板 -->
+            <div class="panel">
+                <div class="panel-header" id="selectedTeacherHeader">選擇教師以編輯</div>
+                <div class="panel-body" id="keysPanel">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">👈</div>
+                        <p>請從左側選擇教師</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增金鑰 Modal -->
+    <div class="modal" id="addKeyModal">
+        <div class="modal-content">
+            <div class="modal-header">新增 API 金鑰</div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>班級名稱</label>
+                    <input type="text" id="keyName" placeholder="例：三年甲班" />
+                </div>
+                <div class="form-group">
+                    <label>API 金鑰</label>
+                    <input type="text" id="keyValue" placeholder="sk-xxxxx" />
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 10px;">
+                        <label class="switch">
+                            <input type="checkbox" id="keyEnabled" checked>
+                            <span class="slider"></span>
+                        </label>
+                        啟用此金鑰
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeAddKeyModal()">取消</button>
+                <button class="btn btn-primary" onclick="confirmAddKey()">新增</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedTeacher = null;
+
+        // 初始化
+        async function init() {
+            await loadConfig();
+        }
+
+        // 載入配置
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/admin/config');
+                const data = await response.json();
+                
+                const teachersList = document.getElementById('teachersList');
+                
+                if (Object.keys(data.teachers).length === 0) {
+                    teachersList.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📚</div>
+                            <p>還沒有教師</p>
+                        </div>
+                    `;
+                } else {
+                    teachersList.innerHTML = Object.keys(data.teachers).map(teacher => `
+                        <div class="teacher-item ${selectedTeacher === teacher ? 'active' : ''}" onclick="selectTeacher('${teacher}')">
+                            <div>
+                                <div class="teacher-item-name">${teacher}</div>
+                                <div class="teacher-item-count">${data.teachers[teacher].api_keys.length} 個金鑰</div>
+                            </div>
+                            <div class="teacher-actions" onclick="event.stopPropagation();">
+                                <button class="btn-sm btn-sm-danger" onclick="deleteTeacher('${teacher}')">刪除</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                if (selectedTeacher) {
+                    renderKeysPanel(data.teachers[selectedTeacher]);
+                }
+            } catch (error) {
+                showMessage('載入配置失敗: ' + error.message, 'error');
+            }
+        }
+
+        // 選擇教師
+        async function selectTeacher(teacher) {
+            selectedTeacher = teacher;
+            await loadConfig();
+        }
+
+        // 渲染 Keys 面板
+        function renderKeysPanel(teacherConfig) {
+            const keysPanel = document.getElementById('keysPanel');
+            const header = document.getElementById('selectedTeacherHeader');
+            
+            header.textContent = `${selectedTeacher} 的 API 金鑰`;
+
+            if (!teacherConfig || teacherConfig.api_keys.length === 0) {
+                keysPanel.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔐</div>
+                        <p>還沒有 API 金鑰</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="openAddKeyModal()" style="width: 100%;">新增金鑰</button>
+                `;
+                return;
+            }
+
+            const keysHtml = `
+                <table class="keys-table">
+                    <thead>
+                        <tr>
+                            <th>班級名稱</th>
+                            <th>API 金鑰</th>
+                            <th>狀態</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${teacherConfig.api_keys.map((key, index) => `
+                            <tr>
+                                <td>${key.name}</td>
+                                <td><div class="key-value">${key.key}</div></td>
+                                <td>
+                                    <label class="switch">
+                                        <input type="checkbox" ${key.enabled ? 'checked' : ''} 
+                                               onchange="toggleKeyStatus('${key.key}', this.checked)">
+                                        <span class="slider"></span>
+                                    </label>
+                                </td>
+                                <td>
+                                    <button class="btn-sm btn-sm-danger" onclick="deleteKey('${key.key}')">刪除</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                <button class="btn btn-primary" onclick="openAddKeyModal()" style="width: 100%; margin-top: 20px;">新增金鑰</button>
+            `;
+
+            keysPanel.innerHTML = keysHtml;
+        }
+
+        // 新增教師
+        async function addTeacher() {
+            const nameInput = document.getElementById('newTeacherName');
+            const name = nameInput.value.trim();
+
+            if (!name) {
+                showMessage('請輸入教師名稱', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/admin/teacher/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    nameInput.value = '';
+                    selectedTeacher = name;
+                    await loadConfig();
+                } else {
+                    showMessage(data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('新增失敗: ' + error.message, 'error');
+            }
+        }
+
+        // 刪除教師
+        async function deleteTeacher(teacher) {
+            if (!confirm(`確定要刪除教師 "${teacher}" 及其所有金鑰嗎？`)) return;
+
+            try {
+                const response = await fetch(`/api/admin/teacher/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ teacher })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    if (selectedTeacher === teacher) {
+                        selectedTeacher = null;
+                    }
+                    await loadConfig();
+                } else {
+                    showMessage(data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('刪除失敗: ' + error.message, 'error');
+            }
+        }
+
+        // 打開新增金鑰 Modal
+        function openAddKeyModal() {
+            if (!selectedTeacher) {
+                showMessage('請先選擇教師', 'error');
+                return;
+            }
+            document.getElementById('addKeyModal').classList.add('show');
+        }
+
+        // 關閉新增金鑰 Modal
+        function closeAddKeyModal() {
+            document.getElementById('addKeyModal').classList.remove('show');
+            document.getElementById('keyName').value = '';
+            document.getElementById('keyValue').value = '';
+            document.getElementById('keyEnabled').checked = true;
+        }
+
+        // 確認新增金鑰
+        async function confirmAddKey() {
+            const name = document.getElementById('keyName').value.trim();
+            const key = document.getElementById('keyValue').value.trim();
+            const enabled = document.getElementById('keyEnabled').checked;
+
+            if (!name || !key) {
+                showMessage('請輸入班級名稱和 API 金鑰', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/admin/key/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ teacher: selectedTeacher, name, key, enabled })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    closeAddKeyModal();
+                    await loadConfig();
+                } else {
+                    showMessage(data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('新增失敗: ' + error.message, 'error');
+            }
+        }
+
+        // 切換金鑰狀態
+        async function toggleKeyStatus(key, enabled) {
+            try {
+                const response = await fetch('/api/admin/key/status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ teacher: selectedTeacher, key, enabled })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    showMessage(data.message, 'error');
+                    await loadConfig();
+                }
+            } catch (error) {
+                showMessage('更新失敗: ' + error.message, 'error');
+                await loadConfig();
+            }
+        }
+
+        // 刪除金鑰
+        async function deleteKey(key) {
+            if (!confirm('確定要刪除此金鑰嗎？')) return;
+
+            try {
+                const response = await fetch('/api/admin/key/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ teacher: selectedTeacher, key })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    await loadConfig();
+                } else {
+                    showMessage(data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('刪除失敗: ' + error.message, 'error');
+            }
+        }
+
+        // 顯示訊息
+        function showMessage(message, type) {
+            const container = document.getElementById('messageContainer');
+            const div = document.createElement('div');
+            div.className = `message ${type} show`;
+            div.textContent = message;
+            container.innerHTML = '';
+            container.appendChild(div);
+
+            setTimeout(() => div.classList.remove('show'), 3000);
+        }
+
+        // 初始化
+        init();
+    </script>
+</body>
+</html>
