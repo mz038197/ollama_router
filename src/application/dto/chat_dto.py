@@ -16,7 +16,7 @@ class ChatCompletionInputDto:
     def to_domain(self) -> ChatCompletionRequest:
         return ChatCompletionRequest(
             model=self.model,
-            messages=[ChatMessage(role=m.get("role", ""), content=m.get("content", "") or "") for m in self.messages],
+            messages=[ChatMessage(role=m.get("role", ""), content=m.get("content", "")) for m in self.messages],
             stream=self.stream,
             temperature=self.temperature,
             max_tokens=self.max_tokens,

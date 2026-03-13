@@ -1,11 +1,11 @@
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ChatMessageSchema(BaseModel):
     role: str
-    content: str | None = ""
+    content: str = Field(min_length=1, description="訊息內容，不能為空")
 
 
 class ChatCompletionsRequestSchema(BaseModel):

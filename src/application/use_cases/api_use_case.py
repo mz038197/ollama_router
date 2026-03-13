@@ -47,3 +47,19 @@ class ApiUseCase:
             messages=[{"role": m.role, "content": m.content} for m in req.messages],
             is_valid=is_valid,
         )
+
+    def log_invalid_auth(self, api_key: str) -> None:
+        """記錄無效的認證嘗試，供安全審計追蹤。"""
+        teacher_name: str | None = None
+        is_valid = False
+
+        if self.api_key_repo.is_enabled():
+            is_valid, teacher_name = self.api_key_repo.verify_api_key(api_key)
+
+        self.logger.log_validation_result(
+            teacher_name=teacher_name,
+            api_key=api_key or "未提供",
+            model="N/A",
+            messages=[],
+            is_valid=is_valid,
+        )

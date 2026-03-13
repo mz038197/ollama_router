@@ -22,8 +22,8 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
 
             is_valid, _ = self.auth_use_case.verify(api_key or "")
             if not is_valid:
-                err = AuthenticationError()
-                return JSONResponse(status_code=err.status_code, content={"detail": err.message})
+                request.state.invalid_api_key = True
+                request.state.api_key = api_key or ""
 
         response = await call_next(request)
         return response

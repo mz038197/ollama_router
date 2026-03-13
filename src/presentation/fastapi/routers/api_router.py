@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.application.dto.chat_dto import ChatCompletionInputDto
 from src.application.use_cases.api_use_case import ApiUseCase
+from src.domain.errors import AuthenticationError
 from src.presentation.fastapi.schemas.api import ChatCompletionsRequestSchema
 
 
@@ -21,6 +22,12 @@ def create_api_router(api_use_case: ApiUseCase) -> APIRouter:
     async def chat_completions(req: ChatCompletionsRequestSchema, request: Request):
         auth_header = request.headers.get("Authorization", "")
         api_key = auth_header[7:] if auth_header.startswith("Bearer ") else request.headers.get("X-API-Key")
+
+        # 處理失敗的驗證並記錄到審計追蹤
+        if getattr(request.state, "invalid_api_key", False):
+            api_use_case.log_invalid_auth(api_key or "")
+            err = AuthenticationError()
+            return JSONResponse(status_code=err.status_code, content={"detail": err.message})
 
         input_dto = ChatCompletionInputDto(
             model=req.model,

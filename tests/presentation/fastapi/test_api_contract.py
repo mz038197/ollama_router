@@ -50,6 +50,28 @@ def test_chat_completion_rejects_when_api_key_missing(fake_repo, fake_gateway, f
     )
     assert response.status_code == 401
     assert response.json() == {"detail": "無效的 API 金鑰"}
+    # 驗證無效的認證嘗試被記錄到審計追蹤
+    assert len(fake_logger.entries) > 0
+    # 檢查最後一次記錄是無效的認證
+    last_entry = fake_logger.entries[-1]
+    assert last_entry["is_valid"] is False
+
+
+def test_chat_completion_rejects_when_api_key_invalid(fake_repo, fake_gateway, fake_logger):
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer invalid-key"},
+        json={"model": "fake-model", "messages": [{"role": "user", "content": "hello"}]},
+    )
+    assert response.status_code == 401
+    assert response.json() == {"detail": "無效的 API 金鑰"}
+    # 驗證無效的認證嘗試被記錄到審計追蹤
+    assert len(fake_logger.entries) > 0
+    # 檢查最後一次記錄是無效的認證
+    last_entry = fake_logger.entries[-1]
+    assert last_entry["is_valid"] is False
+    assert last_entry["api_key"] == "invalid-key"
 
 
 def test_chat_completion_nonstream_contract(fake_repo, fake_gateway, fake_logger):
@@ -162,3 +184,31 @@ def test_admin_teacher_delete_not_found_contract(fake_repo, fake_gateway, fake_l
     payload = response.json()
     assert payload["detail"]["code"] == "ADMIN_TEACHER_NOT_FOUND"
     assert payload["detail"]["message"] == "教師不存在: NoSuchTeacher"
+
+
+def test_chat_completion_rejects_empty_content(fake_repo, fake_gateway, fake_logger):
+    """驗證 content 不能為空字符串 - API 契約強制執行非空內容。"""
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer valid-key"},
+        json={"model": "fake-model", "messages": [{"role": "user", "content": ""}]},
+    )
+    # Pydantic 驗證失敗應返回 422 Unprocessable Entity
+    assert response.status_code == 422
+    payload = response.json()
+    assert "detail" in payload
+
+
+def test_chat_completion_rejects_null_content(fake_repo, fake_gateway, fake_logger):
+    """驗證 content 不能為 null - API 契約不允許可選的內容欄位。"""
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer valid-key"},
+        json={"model": "fake-model", "messages": [{"role": "user", "content": None}]},
+    )
+    # Pydantic 驗證失敗應返回 422 Unprocessable Entity
+    assert response.status_code == 422
+    payload = response.json()
+    assert "detail" in payload
