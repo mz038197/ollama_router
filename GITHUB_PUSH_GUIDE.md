@@ -14,6 +14,12 @@
 4. [推送到 GitHub](#推送到-github)
 5. [驗證推送結果](#驗證推送結果)
 6. [常見問題](#常見問題)
+   - [Q1: Repository not found](#q1-錯誤-error-repository-not-found)
+   - [Q2: Permission denied](#q2-錯誤-permission-denied-publickey)
+   - [Q3: 後續推送更新](#q3-如何後續推送更新)
+   - [Q4: 克隆倉庫](#q4-如何克隆倉庫到另一台電腦)
+   - [Q5: 查看倉庫狀態](#q5-如何查看遠端倉庫的狀態)
+   - [Q6: SSH Key 有效期](#q6-ssh-key-會存在多久需要更新嗎)
 
 ---
 
@@ -326,6 +332,74 @@ git status
 git log origin/main..main
 ```
 
+### Q6: SSH Key 會存在多久？需要更新嗎？
+
+**SSH Key 的有效期**：
+
+SSH Key 本身**沒有過期日期**，理論上可以永久使用。只要：
+- 你的 Ubuntu 伺服器上的私鑰 (`~/.ssh/id_ed25519`) 存在
+- GitHub 上的公鑰未被刪除
+
+就可以無限期使用。
+
+**實際影響因素**：
+
+| 因素 | 說明 |
+|------|------|
+| **硬碟保留** | 如果 Ubuntu 伺服器的 `/home/mkshaiadmin/.ssh/` 未被刪除，Key 永久有效 |
+| **GitHub 端** | GitHub 上的公鑰預設**永久有效**（除非手動刪除） |
+| **系統重裝** | 若伺服器重裝系統，需重新產生 SSH Key |
+| **安全政策** | 企業環境可能要求定期輪換 Key |
+
+**檢查 SSH Key 狀態**：
+
+```bash
+# 檢查本地 SSH Key 是否存在
+ls -la ~/.ssh/id_ed25519
+
+# 查看 GitHub 上已新增的 Key（訪問瀏覽器）
+# https://github.com/settings/keys
+```
+
+**何時需要輪換 SSH Key**：
+
+1. **懷疑洩露** - 如果私鑰可能被洩露，立即刪除
+2. **定期安全審計** - 建議每 1-2 年輪換一次
+3. **系統遷移** - 換伺服器時需重新產生
+4. **團隊安全** - 離職員工的 Key 應刪除
+
+**輪換 SSH Key 的步驟**：
+
+```bash
+# 1. 產生新的 SSH Key
+ssh-keygen -t ed25519 -C "your_email@example.com"
+# 保存位置可改為：~/.ssh/id_ed25519_new
+
+# 2. 在 GitHub 上新增新 Key
+# https://github.com/settings/keys
+# 貼上新的公鑰
+
+# 3. 更新 SSH config（如使用不同的 Key 名稱）
+# 編輯 ~/.ssh/config，指定要使用的 Key
+
+# 4. 測試新 Key
+ssh -T git@github.com
+
+# 5. 刪除舊 Key（確認新 Key 可用後）
+# 在 GitHub Settings 上刪除舊公鑰
+```
+
+**安全備份建議**：
+
+```bash
+# 安全備份私鑰（加密存儲）
+cp ~/.ssh/id_ed25519 ~/backup/id_ed25519.backup
+chmod 600 ~/backup/id_ed25519.backup
+
+# 或使用加密存儲
+tar czf - ~/.ssh | gpg --symmetric --cipher-algo AES256 > ssh_backup.tar.gz.gpg
+```
+
 ---
 
 ## 快速參考命令
@@ -375,6 +449,6 @@ git log origin/main..main
 
 ---
 
-**文檔版本**: 1.0  
-**最後更新**: 2026-03-13  
+**文檔版本**: 1.1  
+**最後更新**: 2026-03-13（新增 Q6：SSH Key 有效期與安全管理）  
 **作者**: AI Assistant
