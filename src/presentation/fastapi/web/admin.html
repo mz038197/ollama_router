@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ollama Router - API 金鑰管理</title>
+    <title>馬公高中AIServer控管中心</title>
     <style>
         * {
             margin: 0;
@@ -225,6 +225,16 @@
             color: white;
         }
 
+        .btn-sm-primary {
+            background: rgba(102, 126, 234, 0.15);
+            color: #3f51b5;
+        }
+
+        .btn-sm-primary:hover {
+            background: #667eea;
+            color: white;
+        }
+
         .keys-table {
             width: 100%;
             border-collapse: collapse;
@@ -431,12 +441,58 @@
         input:checked + .slider:before {
             transform: translateX(26px);
         }
+
+        .logs-panel {
+            margin-top: 30px;
+        }
+
+        .logs-filter-grid {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        @media (max-width: 1000px) {
+            .logs-filter-grid {
+                grid-template-columns: repeat(2, minmax(120px, 1fr));
+            }
+        }
+
+        .logs-table-wrap {
+            overflow-x: auto;
+        }
+
+        .logs-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 900px;
+        }
+
+        .logs-table th,
+        .logs-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 13px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .logs-table thead {
+            background: #f8f9fa;
+        }
+
+        .logs-message-preview {
+            max-width: 340px;
+            word-break: break-word;
+            color: #444;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔑 Ollama Router - API 金鑰管理</h1>
+            <h1>馬公高中 AI Server 控管中心</h1>
             <p>管理教師和班級的 API 金鑰配置</p>
         </div>
 
@@ -475,12 +531,58 @@
                 </div>
             </div>
         </div>
+
+        <div class="panel logs-panel">
+            <div class="panel-header">請求記錄（Logs）</div>
+            <div class="panel-body">
+                <div class="logs-filter-grid">
+                    <input type="date" id="logDate" />
+                    <select id="logTeacher">
+                        <option value="">全部教師</option>
+                    </select>
+                    <input type="text" id="logModel" placeholder="模型（可選）" />
+                    <select id="logIsValid">
+                        <option value="">全部結果</option>
+                        <option value="true">通過</option>
+                        <option value="false">拒絕</option>
+                    </select>
+                    <input type="text" id="logKeyword" placeholder="訊息關鍵字" />
+                    <input type="number" id="logLimit" value="50" min="1" max="200" />
+                </div>
+
+                <div class="button-group" style="margin-top: 0;">
+                    <button class="btn btn-primary" onclick="applyLogFilters()">查詢</button>
+                    <button class="btn btn-secondary" onclick="refreshLogs()">重新整理</button>
+                    <button class="btn btn-secondary" id="loadMoreLogsBtn" onclick="loadMoreLogs()" style="display:none;">載入更多</button>
+                </div>
+
+                <div class="logs-table-wrap" style="margin-top: 16px;">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>時間</th>
+                                <th>教師</th>
+                                <th>模型</th>
+                                <th>驗證</th>
+                                <th>API Key</th>
+                                <th>訊息預覽</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsTableBody">
+                            <tr>
+                                <td colspan="6" style="text-align:center; color:#999;">尚無資料</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 新增金鑰 Modal -->
     <div class="modal" id="addKeyModal">
         <div class="modal-content">
-            <div class="modal-header">新增 API 金鑰</div>
+            <div class="modal-header" id="keyModalTitle">新增 API 金鑰</div>
             <div class="modal-body">
                 <div class="form-group">
                     <label>班級名稱</label>
@@ -502,17 +604,23 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeAddKeyModal()">取消</button>
-                <button class="btn btn-primary" onclick="confirmAddKey()">新增</button>
+                <button class="btn btn-primary" id="keyModalConfirmBtn" onclick="confirmAddKey()">新增</button>
             </div>
         </div>
     </div>
 
     <script>
         let selectedTeacher = null;
+        let currentTeacherKeys = [];
+        let editingOldKey = null;
+        let logsOffset = 0;
+        let logsHasMore = false;
 
         // 初始化
         async function init() {
             await loadConfig();
+            setDefaultLogDate();
+            await loadLogs(true);
         }
 
         // 載入配置
@@ -544,6 +652,8 @@
                     `).join('');
                 }
 
+                updateLogTeacherOptions(Object.keys(data.teachers));
+
                 if (selectedTeacher) {
                     renderKeysPanel(data.teachers[selectedTeacher]);
                 }
@@ -562,10 +672,11 @@
         function renderKeysPanel(teacherConfig) {
             const keysPanel = document.getElementById('keysPanel');
             const header = document.getElementById('selectedTeacherHeader');
+            currentTeacherKeys = teacherConfig?.api_keys || [];
             
             header.textContent = `${selectedTeacher} 的 API 金鑰`;
 
-            if (!teacherConfig || teacherConfig.api_keys.length === 0) {
+            if (!teacherConfig || currentTeacherKeys.length === 0) {
                 keysPanel.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">🔐</div>
@@ -587,7 +698,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        ${teacherConfig.api_keys.map((key, index) => `
+                        ${currentTeacherKeys.map((key, index) => `
                             <tr>
                                 <td>${key.name}</td>
                                 <td><div class="key-value">${key.key}</div></td>
@@ -599,6 +710,7 @@
                                     </label>
                                 </td>
                                 <td>
+                                    <button class="btn-sm btn-sm-primary" onclick="openEditKeyModal(${index})">編輯</button>
                                     <button class="btn-sm btn-sm-danger" onclick="deleteKey('${key.key}')">刪除</button>
                                 </td>
                             </tr>
@@ -676,6 +788,28 @@
                 showMessage('請先選擇教師', 'error');
                 return;
             }
+            editingOldKey = null;
+            document.getElementById('keyModalTitle').textContent = '新增 API 金鑰';
+            document.getElementById('keyModalConfirmBtn').textContent = '新增';
+            document.getElementById('keyName').value = '';
+            document.getElementById('keyValue').value = '';
+            document.getElementById('keyEnabled').checked = true;
+            document.getElementById('addKeyModal').classList.add('show');
+        }
+
+        // 打開編輯金鑰 Modal
+        function openEditKeyModal(index) {
+            const target = currentTeacherKeys[index];
+            if (!target) {
+                showMessage('找不到要編輯的金鑰', 'error');
+                return;
+            }
+            editingOldKey = target.key;
+            document.getElementById('keyModalTitle').textContent = '編輯 API 金鑰';
+            document.getElementById('keyModalConfirmBtn').textContent = '儲存';
+            document.getElementById('keyName').value = target.name || '';
+            document.getElementById('keyValue').value = target.key || '';
+            document.getElementById('keyEnabled').checked = Boolean(target.enabled);
             document.getElementById('addKeyModal').classList.add('show');
         }
 
@@ -685,6 +819,7 @@
             document.getElementById('keyName').value = '';
             document.getElementById('keyValue').value = '';
             document.getElementById('keyEnabled').checked = true;
+            editingOldKey = null;
         }
 
         // 確認新增金鑰
@@ -699,10 +834,16 @@
             }
 
             try {
-                const response = await fetch('/api/admin/key/add', {
+                const isEdit = Boolean(editingOldKey);
+                const url = isEdit ? '/api/admin/key/update' : '/api/admin/key/add';
+                const body = isEdit
+                    ? { teacher: selectedTeacher, old_key: editingOldKey, name, key, enabled }
+                    : { teacher: selectedTeacher, name, key, enabled };
+
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ teacher: selectedTeacher, name, key, enabled })
+                    body: JSON.stringify(body)
                 });
 
                 const data = await response.json();
@@ -715,7 +856,8 @@
                     showMessage(data.message, 'error');
                 }
             } catch (error) {
-                showMessage('新增失敗: ' + error.message, 'error');
+                const action = editingOldKey ? '更新' : '新增';
+                showMessage(`${action}失敗: ` + error.message, 'error');
             }
         }
 
@@ -762,6 +904,109 @@
             } catch (error) {
                 showMessage('刪除失敗: ' + error.message, 'error');
             }
+        }
+
+        function setDefaultLogDate() {
+            const dateInput = document.getElementById('logDate');
+            if (!dateInput.value) {
+                const now = new Date();
+                const yyyy = now.getFullYear();
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const dd = String(now.getDate()).padStart(2, '0');
+                dateInput.value = `${yyyy}-${mm}-${dd}`;
+            }
+        }
+
+        function updateLogTeacherOptions(teachers) {
+            const teacherSelect = document.getElementById('logTeacher');
+            const selected = teacherSelect.value;
+            const options = ['<option value="">全部教師</option>'];
+            teachers.forEach((teacher) => {
+                const isSelected = selected === teacher ? 'selected' : '';
+                options.push(`<option value="${teacher}" ${isSelected}>${teacher}</option>`);
+            });
+            teacherSelect.innerHTML = options.join('');
+        }
+
+        function buildLogsQuery(limit, offset) {
+            const params = new URLSearchParams();
+            const dateValue = document.getElementById('logDate').value;
+            if (dateValue) {
+                params.set('date', dateValue.replaceAll('-', ''));
+            }
+
+            const teacher = document.getElementById('logTeacher').value.trim();
+            const model = document.getElementById('logModel').value.trim();
+            const isValid = document.getElementById('logIsValid').value;
+            const keyword = document.getElementById('logKeyword').value.trim();
+            if (teacher) params.set('teacher', teacher);
+            if (model) params.set('model', model);
+            if (isValid) params.set('is_valid', isValid);
+            if (keyword) params.set('keyword', keyword);
+            params.set('limit', String(limit));
+            params.set('offset', String(offset));
+            return params.toString();
+        }
+
+        async function loadLogs(reset = true) {
+            const limitInput = Number(document.getElementById('logLimit').value || 50);
+            const limit = Math.min(Math.max(limitInput, 1), 200);
+            const offset = reset ? 0 : logsOffset;
+            const query = buildLogsQuery(limit, offset);
+
+            try {
+                const response = await fetch(`/api/admin/logs?${query}`);
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data?.detail?.message || '載入 logs 失敗');
+                }
+
+                renderLogs(data.items || [], !reset);
+                logsOffset = offset + (data.items || []).length;
+                logsHasMore = Boolean(data.has_more);
+                document.getElementById('loadMoreLogsBtn').style.display = logsHasMore ? 'inline-block' : 'none';
+            } catch (error) {
+                showMessage('載入 logs 失敗: ' + error.message, 'error');
+            }
+        }
+
+        function renderLogs(items, append = false) {
+            const tbody = document.getElementById('logsTableBody');
+            const rows = (items || []).map((item) => `
+                <tr>
+                    <td>${item.timestamp || '-'}</td>
+                    <td>${item.teacher || '-'}</td>
+                    <td>${item.model || '-'}</td>
+                    <td>${item.validation_result || '-'}</td>
+                    <td><div class="key-value">${item.api_key || '-'}</div></td>
+                    <td><div class="logs-message-preview">${item.message_preview || ''}</div></td>
+                </tr>
+            `).join('');
+
+            if (!rows && !append) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999;">尚無資料</td></tr>';
+                return;
+            }
+
+            if (append) {
+                tbody.insertAdjacentHTML('beforeend', rows);
+            } else {
+                tbody.innerHTML = rows;
+            }
+        }
+
+        async function applyLogFilters() {
+            logsOffset = 0;
+            await loadLogs(true);
+        }
+
+        async function refreshLogs() {
+            await loadLogs(true);
+        }
+
+        async function loadMoreLogs() {
+            if (!logsHasMore) return;
+            await loadLogs(false);
         }
 
         // 顯示訊息

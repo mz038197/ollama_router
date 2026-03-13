@@ -71,6 +71,26 @@ class JsonApiKeyRepository:
         )
         self._save_config()
 
+    def update_api_key(
+        self,
+        teacher_name: str,
+        old_key: str,
+        name: str,
+        key: str,
+        enabled: bool,
+    ) -> bool:
+        if teacher_name not in self.config_data:
+            return False
+        api_keys = self.config_data[teacher_name].get("api_keys", [])
+        for key_info in api_keys:
+            if key_info["key"] == old_key:
+                key_info["name"] = name
+                key_info["key"] = key
+                key_info["enabled"] = enabled
+                self._save_config()
+                return True
+        return False
+
     def update_api_key_status(self, teacher_name: str, key: str, enabled: bool) -> bool:
         if teacher_name not in self.config_data:
             return False

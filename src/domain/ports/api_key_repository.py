@@ -20,6 +20,16 @@ class ApiKeyRepositoryPort(Protocol):
     def add_api_key(self, teacher_name: str, name: str, key: str, enabled: bool = True) -> None:
         ...
 
+    def update_api_key(
+        self,
+        teacher_name: str,
+        old_key: str,
+        name: str,
+        key: str,
+        enabled: bool,
+    ) -> bool:
+        ...
+
     def update_api_key_status(self, teacher_name: str, key: str, enabled: bool) -> bool:
         ...
 

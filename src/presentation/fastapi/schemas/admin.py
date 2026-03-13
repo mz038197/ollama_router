@@ -16,6 +16,14 @@ class AddKeyRequest(BaseModel):
     enabled: bool = True
 
 
+class UpdateKeyRequest(BaseModel):
+    teacher: str
+    old_key: str
+    name: str
+    key: str
+    enabled: bool = True
+
+
 class UpdateKeyStatusRequest(BaseModel):
     teacher: str
     key: str

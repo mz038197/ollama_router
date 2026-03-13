@@ -30,7 +30,7 @@ def build_container(
         api_key_repo=api_key_repo,
         logger=request_logger,
     )
-    admin_use_case = AdminUseCase(api_key_repo=api_key_repo)
+    admin_use_case = AdminUseCase(api_key_repo=api_key_repo, request_logger=request_logger)
 
     return AppContainer(
         api_key_repo=api_key_repo,

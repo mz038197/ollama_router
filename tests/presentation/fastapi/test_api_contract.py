@@ -13,7 +13,7 @@ from src.presentation.fastapi.routers.api_router import create_api_router
 def build_test_client(fake_repo, fake_gateway, fake_logger) -> TestClient:
     auth_use_case = AuthUseCase(api_key_repo=fake_repo)
     api_use_case = ApiUseCase(gateway=fake_gateway, api_key_repo=fake_repo, logger=fake_logger)
-    admin_use_case = AdminUseCase(api_key_repo=fake_repo)
+    admin_use_case = AdminUseCase(api_key_repo=fake_repo, request_logger=fake_logger)
 
     app = FastAPI()
     register_error_handlers(app)
@@ -120,6 +120,23 @@ def test_admin_config_contract(fake_repo, fake_gateway, fake_logger):
     assert "enabled" in payload
 
 
+def test_admin_logs_contract(fake_repo, fake_gateway, fake_logger):
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer valid-key"},
+        json={"model": "fake-model", "messages": [{"role": "user", "content": "hello log"}], "stream": False},
+    )
+
+    response = client.get("/api/admin/logs?limit=10")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "items" in payload
+    assert "total" in payload
+    assert "has_more" in payload
+    assert isinstance(payload["items"], list)
+
+
 def test_admin_teacher_add_contract(fake_repo, fake_gateway, fake_logger):
     client = build_test_client(fake_repo, fake_gateway, fake_logger)
     response = client.post("/api/admin/teacher/add", json={"name": "TeacherB"})
@@ -142,6 +159,22 @@ def test_admin_key_add_contract(fake_repo, fake_gateway, fake_logger):
     )
     assert response.status_code == 201
     assert response.json() == {"success": True, "message": "已為 TeacherA 新增金鑰: ClassZ"}
+
+
+def test_admin_key_update_contract(fake_repo, fake_gateway, fake_logger):
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    response = client.post(
+        "/api/admin/key/update",
+        json={
+            "teacher": "TeacherA",
+            "old_key": "valid-key",
+            "name": "ClassA-Edited",
+            "key": "valid-key-updated",
+            "enabled": False,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json() == {"success": True, "message": "已更新金鑰: ClassA-Edited"}
 
 
 def test_admin_key_status_contract(fake_repo, fake_gateway, fake_logger):

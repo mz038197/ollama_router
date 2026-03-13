@@ -50,6 +50,25 @@ class FakeApiKeyRepository:
             {"name": name, "key": key, "enabled": enabled}
         )
 
+    def update_api_key(
+        self,
+        teacher_name: str,
+        old_key: str,
+        name: str,
+        key: str,
+        enabled: bool,
+    ) -> bool:
+        if teacher_name not in self.config_data:
+            return False
+        api_keys = self.config_data[teacher_name].get("api_keys", [])
+        for key_info in api_keys:
+            if key_info["key"] == old_key:
+                key_info["name"] = name
+                key_info["key"] = key
+                key_info["enabled"] = enabled
+                return True
+        return False
+
     def update_api_key_status(self, teacher_name: str, key: str, enabled: bool) -> bool:
         if teacher_name not in self.config_data:
             return False
@@ -79,7 +98,7 @@ class FakeRequestLogger:
         teacher_name: str | None,
         api_key: str,
         model: str,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         is_valid: bool,
     ) -> None:
         self.entries.append(
@@ -91,6 +110,52 @@ class FakeRequestLogger:
                 "is_valid": is_valid,
             }
         )
+
+    def query_logs(
+        self,
+        date: str | None = None,
+        teacher: str | None = None,
+        model: str | None = None,
+        is_valid: bool | None = None,
+        keyword: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        matched = []
+        keyword_filter = keyword.strip().lower() if keyword else None
+        for entry in self.entries:
+            message_preview = ""
+            messages = entry.get("messages") or []
+            if messages:
+                message_preview = str(messages[-1].get("content", ""))
+
+            if teacher and entry.get("teacher_name") != teacher:
+                continue
+            if model and entry.get("model") != model:
+                continue
+            if is_valid is not None and bool(entry.get("is_valid")) is not is_valid:
+                continue
+            if keyword_filter:
+                if keyword_filter not in message_preview.lower():
+                    continue
+
+            matched.append(
+                {
+                    "timestamp": "2026-03-13 00:00:00",
+                    "teacher": entry.get("teacher_name") or "未知",
+                    "api_key": entry.get("api_key", ""),
+                    "model": entry.get("model", ""),
+                    "is_valid": entry.get("is_valid", False),
+                    "validation_result": "通過" if entry.get("is_valid") else "拒絕",
+                    "message_preview": message_preview,
+                }
+            )
+
+        matched.reverse()
+        start = max(offset, 0)
+        end = start + max(limit, 1)
+        items = matched[start:end]
+        return {"items": items, "total": len(matched), "has_more": end < len(matched)}
 
 
 class FakeOllamaGateway:
