@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.application.dto.chat_dto import ChatCompletionInputDto
 from src.application.use_cases.api_use_case import ApiUseCase
-from src.domain.errors import AuthenticationError
+from src.domain.errors import AuthenticationError, UpstreamServiceError, ServiceUnavailableError
 from src.presentation.fastapi.schemas.api import ChatCompletionsRequestSchema
 
 
@@ -17,6 +17,14 @@ def create_api_router(api_use_case: ApiUseCase) -> APIRouter:
     @router.get("/v1/models")
     async def list_models():
         return await api_use_case.models()
+
+    async def _stream_with_error_handling(domain_req, api_key):
+        """包含錯誤處理的流式生成器"""
+        try:
+            async for chunk in api_use_case.chat_stream(domain_req, api_key):
+                yield chunk
+        except (UpstreamServiceError, ServiceUnavailableError) as e:
+            yield f"data: {{'error': {{'message': '{e.message}', 'code': '{e.code}'}}}}\n\n".encode()
 
     @router.post("/v1/chat/completions")
     async def chat_completions(req: ChatCompletionsRequestSchema, request: Request):
@@ -41,7 +49,7 @@ def create_api_router(api_use_case: ApiUseCase) -> APIRouter:
         domain_req = input_dto.to_domain()
 
         if domain_req.stream:
-            generator = api_use_case.chat_stream(domain_req, api_key)
+            generator = _stream_with_error_handling(domain_req, api_key)
             return StreamingResponse(generator, media_type="text/event-stream")
 
         data = await api_use_case.chat_nonstream(domain_req, api_key)

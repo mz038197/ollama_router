@@ -245,3 +245,73 @@ def test_chat_completion_rejects_null_content(fake_repo, fake_gateway, fake_logg
     assert response.status_code == 422
     payload = response.json()
     assert "detail" in payload
+
+
+def test_chat_completion_with_openai_text_format(fake_repo, fake_gateway, fake_logger):
+    """驗證支援 OpenAI 相容格式 - content 是包含 text 物件的陣列"""
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer valid-key"},
+        json={
+            "model": "fake-model",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "What is this?"}],
+                }
+            ],
+            "stream": False,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["object"] == "chat.completion"
+    assert payload["choices"][0]["message"]["role"] == "assistant"
+
+
+def test_chat_completion_with_openai_image_format(fake_repo, fake_gateway, fake_logger):
+    """驗證支援 OpenAI 相容格式 - content 包含文字和影像"""
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer valid-key"},
+        json={
+            "model": "fake-model",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What's in this image?"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/jpeg;base64,/9j/4AAQSkZJRg=="},
+                        },
+                    ],
+                }
+            ],
+            "stream": False,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["object"] == "chat.completion"
+    assert fake_gateway.last_nonstream_req is not None
+    assert fake_gateway.last_nonstream_req.messages[0].images == ["/9j/4AAQSkZJRg=="]
+
+
+def test_chat_completion_with_simple_text_format(fake_repo, fake_gateway, fake_logger):
+    """驗證向後相容性 - content 仍可以是簡單字符串"""
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer valid-key"},
+        json={
+            "model": "fake-model",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "stream": False,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["object"] == "chat.completion"

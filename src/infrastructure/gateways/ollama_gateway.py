@@ -164,6 +164,7 @@ class OllamaGateway:
             self.waiting_count -= 1
 
         success = False
+        released = False
         request_id = f"chatcmpl-{uuid.uuid4().hex}"
         created = int(time.time())
         started = time.perf_counter()
@@ -226,8 +227,13 @@ class OllamaGateway:
                         yield b"data: [DONE]\n\n"
                         success = True
                         break
+        except UpstreamServiceError:
+            await self._release_backend(backend, success=False)
+            released = True
+            raise
         finally:
-            await self._release_backend(backend, success=success)
+            if not released:
+                await self._release_backend(backend, success=success)
 
     async def models(self) -> dict[str, Any]:
         assert self.client is not None
