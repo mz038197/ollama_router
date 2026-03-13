@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 class ChatMessage:
     role: str
     content: str = ""
+    images: list[str] | None = None
 
 
 @dataclass

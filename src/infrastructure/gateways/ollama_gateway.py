@@ -97,9 +97,16 @@ class OllamaGateway:
             backend.semaphore.release()
 
     def _to_ollama_payload(self, req: ChatCompletionRequest) -> dict[str, Any]:
+        messages = []
+        for msg in req.messages:
+            message_obj = {"role": msg.role, "content": msg.content}
+            if msg.images:
+                message_obj["images"] = msg.images
+            messages.append(message_obj)
+
         return {
             "model": req.model,
-            "messages": [{"role": msg.role, "content": msg.content} for msg in req.messages],
+            "messages": messages,
             "stream": req.stream,
             "options": {
                 "temperature": req.temperature if req.temperature is not None else self.default_temperature,

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class ChatMessageSchema(BaseModel):
     role: str
     content: str = Field(min_length=1, description="訊息內容，不能為空")
+    images: list[str] | None = Field(default=None, description="影像資料陣列（base64 編碼或 URL）")
 
 
 class ChatCompletionsRequestSchema(BaseModel):
