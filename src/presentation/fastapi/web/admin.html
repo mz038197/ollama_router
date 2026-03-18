@@ -295,6 +295,44 @@
             gap: 5px;
         }
 
+        .key-value-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .key-value-masked {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #666;
+            letter-spacing: 0.02em;
+        }
+
+        .btn-copy {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #f8f9fa;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-copy:hover {
+            background: #e9ecef;
+            color: #333;
+        }
+
+        .btn-copy svg {
+            width: 14px;
+            height: 14px;
+        }
+
         .message {
             padding: 12px 16px;
             border-radius: 6px;
@@ -589,8 +627,18 @@
                     <input type="text" id="keyName" placeholder="例：三年甲班" />
                 </div>
                 <div class="form-group">
-                    <label>API 金鑰</label>
-                    <input type="text" id="keyValue" placeholder="sk-xxxxx" />
+                    <label style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                        <span>API 金鑰</span>
+                        <button type="button" class="btn btn-secondary" style="flex: 0 0 auto; padding: 6px 12px; font-size: 12px;" onclick="fillGeneratedApiKey()">
+                            自動產生金鑰
+                        </button>
+                    </label>
+                    <div class="key-value-wrap">
+                        <input type="text" id="keyValue" placeholder="sk-xxxxx" style="flex: 1;" />
+                        <button type="button" class="btn-copy" onclick="copyApiKeyFromInput()" title="複製金鑰">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label style="display: flex; align-items: center; gap: 10px;">
@@ -615,6 +663,146 @@
         let editingOldKey = null;
         let logsOffset = 0;
         let logsHasMore = false;
+
+        // 產生類似 OpenAI 格式的 API Key（僅前端隨機字串）
+        function generateApiKey() {
+            const prefix = 'sk-';
+            const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            const length = 48;
+            let body = '';
+            for (let i = 0; i < length; i++) {
+                const idx = Math.floor(Math.random() * charset.length);
+                body += charset[idx];
+            }
+            return prefix + body;
+        }
+
+        // 將產生的金鑰填入輸入框
+        function fillGeneratedApiKey() {
+            const input = document.getElementById('keyValue');
+            if (!input) return;
+            input.value = generateApiKey();
+        }
+
+        // 遮罩 API Key 顯示（僅顯示前 7 字元與後 4 字元）
+        function maskApiKey(key) {
+            if (!key || typeof key !== 'string') return '—';
+            if (key.length <= 11) return 'sk-****';
+            return key.substring(0, 7) + '…' + key.substring(key.length - 4);
+        }
+
+        // 避免 HTML 注入
+        function escapeHtml(str) {
+            if (str == null) return '';
+            const s = String(str);
+            const div = document.createElement('div');
+            div.textContent = s;
+            return div.innerHTML;
+        }
+
+        // 複製到剪貼簿（支援舊瀏覽器）
+        function copyToClipboard(text) {
+            if (!text) {
+                showMessage('無法複製空白內容', 'error');
+                return;
+            }
+
+            // 優先使用新式 Clipboard API
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showMessage('已複製到剪貼簿', 'success');
+                }).catch(() => {
+                    // 降級到舊式方法
+                    fallbackCopyToClipboard(text);
+                });
+            } else {
+                // 舊瀏覽器降級方案
+                fallbackCopyToClipboard(text);
+            }
+        }
+
+        // 舊式複製方法（降級方案）
+        function fallbackCopyToClipboard(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            try {
+                textarea.select();
+                document.execCommand('copy');
+                showMessage('已複製到剪貼簿', 'success');
+            } catch (err) {
+                showMessage('複製失敗，請手動複製', 'error');
+            } finally {
+                document.body.removeChild(textarea);
+            }
+        }
+
+        // 複製金鑰（依索引，用於金鑰列表）
+        function copyApiKeyByIndex(index) {
+            const key = currentTeacherKeys[index]?.key;
+            if (!key) {
+                showMessage('無法取得金鑰', 'error');
+                return;
+            }
+            copyToClipboard(key);
+        }
+
+        // 複製金鑰（從 Modal 輸入框）
+        function copyApiKeyFromInput() {
+            const input = document.getElementById('keyValue');
+            const key = input?.value?.trim();
+            if (!key) {
+                showMessage('請先輸入或產生金鑰', 'error');
+                return;
+            }
+            copyToClipboard(key);
+        }
+
+        // 依索引切換金鑰狀態
+        async function toggleKeyStatusByIndex(index, enabled) {
+            const key = currentTeacherKeys[index]?.key;
+            if (!key) return;
+            try {
+                const response = await fetch('/api/admin/key/status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ teacher: selectedTeacher, key, enabled })
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    showMessage(data.message, 'error');
+                    await loadConfig();
+                }
+            } catch (error) {
+                showMessage('更新失敗: ' + error.message, 'error');
+                await loadConfig();
+            }
+        }
+
+        // 依索引刪除金鑰
+        async function deleteKeyByIndex(index) {
+            const key = currentTeacherKeys[index]?.key;
+            if (!key) return;
+            if (!confirm('確定要刪除此金鑰嗎？')) return;
+            try {
+                const response = await fetch('/api/admin/key/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ teacher: selectedTeacher, key })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    await loadConfig();
+                } else {
+                    showMessage(data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('刪除失敗: ' + error.message, 'error');
+            }
+        }
 
         // 初始化
         async function init() {
@@ -700,18 +888,25 @@
                     <tbody>
                         ${currentTeacherKeys.map((key, index) => `
                             <tr>
-                                <td>${key.name}</td>
-                                <td><div class="key-value">${key.key}</div></td>
+                                <td>${escapeHtml(key.name)}</td>
+                                <td>
+                                    <div class="key-value-wrap">
+                                        <span class="key-value-masked">${escapeHtml(maskApiKey(key.key))}</span>
+                                        <button type="button" class="btn-copy" onclick="copyApiKeyByIndex(${index})" title="複製金鑰">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        </button>
+                                    </div>
+                                </td>
                                 <td>
                                     <label class="switch">
                                         <input type="checkbox" ${key.enabled ? 'checked' : ''} 
-                                               onchange="toggleKeyStatus('${key.key}', this.checked)">
+                                               onchange="toggleKeyStatusByIndex(${index}, this.checked)">
                                         <span class="slider"></span>
                                     </label>
                                 </td>
                                 <td>
                                     <button class="btn-sm btn-sm-primary" onclick="openEditKeyModal(${index})">編輯</button>
-                                    <button class="btn-sm btn-sm-danger" onclick="deleteKey('${key.key}')">刪除</button>
+                                    <button class="btn-sm btn-sm-danger" onclick="deleteKeyByIndex(${index})">刪除</button>
                                 </td>
                             </tr>
                         `).join('')}
@@ -882,30 +1077,6 @@
             }
         }
 
-        // 刪除金鑰
-        async function deleteKey(key) {
-            if (!confirm('確定要刪除此金鑰嗎？')) return;
-
-            try {
-                const response = await fetch('/api/admin/key/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ teacher: selectedTeacher, key })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showMessage(data.message, 'success');
-                    await loadConfig();
-                } else {
-                    showMessage(data.message, 'error');
-                }
-            } catch (error) {
-                showMessage('刪除失敗: ' + error.message, 'error');
-            }
-        }
-
         function setDefaultLogDate() {
             const dateInput = document.getElementById('logDate');
             if (!dateInput.value) {
@@ -978,7 +1149,7 @@
                     <td>${item.teacher || '-'}</td>
                     <td>${item.model || '-'}</td>
                     <td>${item.validation_result || '-'}</td>
-                    <td><div class="key-value">${item.api_key || '-'}</div></td>
+                    <td><div class="key-value-masked">${escapeHtml(maskApiKey(item.api_key || '')) || '—'}</div></td>
                     <td><div class="logs-message-preview">${item.message_preview || ''}</div></td>
                 </tr>
             `).join('');
