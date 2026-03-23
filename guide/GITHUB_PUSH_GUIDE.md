@@ -37,7 +37,7 @@
    - **Repository name**: `ollama_router`
    - **Description** (可選): 
      ```
-     OpenAI-compatible Ollama Router with Clean Architecture
+     OpenAI-compatible Ollama Router with Clean Architecture — 轉發 /v1/chat/completions，支援 tools／tool_calls 與多後端負載
      ```
    - **Public/Private**: 選擇 **Public**（如果要公開分享）或 **Private**（私密倉庫）
    - **Initialize this repository with**: **不要勾選任何選項**
@@ -253,21 +253,27 @@ https://github.com/YOUR_USERNAME/ollama_router
 ### 步驟 5.2：確認內容
 
 頁面應該顯示：
-- ✅ 所有專案檔案（src/, tests/, app.py 等）
+- ✅ 所有專案檔案（`src/`、`tests/`、`app.py`、`guid/` 等）
 - ✅ README.md 檔案內容
-- ✅ 提交記錄（至少 5 個提交）
-- ✅ 分支為 `main`
+- ✅ 提交記錄（隨開發累積，數量會持續增加）
+- ✅ 分支為 `main`（或你推送時使用的分支名稱）
+
+**與本專案相關的近期能力**（推送後可在 README／程式碼中對照）：
+- OpenAI 相容的 `POST /v1/chat/completions`（含 `tools`、`tool_choice`、多輪 `tool_calls`／`tool` 訊息，並轉發至 Ollama）
+- API 金鑰驗證、請求日誌、多 Ollama 後端路由
 
 ### 步驟 5.3：查看提交歷史
 
-點擊 **Commits** 按鈕可查看所有提交記錄，應該包括：
+點擊 **Commits** 按鈕可查看所有提交記錄。範例（實際訊息依你的分支與開發歷程而異）：
 ```
-修復 Bug 1 與 Bug 2：安全審計日誌與 API 契約驗證
-Phase 2 完成：Clean Architecture 測試層實作與 REST API 錯誤模型標準化
-實作 API 金鑰驗證與日誌系統
-完善 .gitignore 設定
-初始化 Ollama Router 專案
+test: 新增 tool calling 契約與閘道輔助函式測試
+feat(gateway): Ollama 轉發 tools 並轉換 tool_calls 回應
+feat(api): 聊天 completions 接受 tools 與 tool 訊息欄位
+feat(chat): 擴充領域模型與 DTO 支援 tools 與 tool 訊息
+…（較早的提交）
 ```
+
+若你使用功能分支（例如 `suport_tools_calling`）再合併進 `main`，GitHub 上會同時顯示合併提交與各功能提交。
 
 ---
 
@@ -425,6 +431,7 @@ tar czf - ~/.ssh | gpg --symmetric --cipher-algo AES256 > ssh_backup.tar.gz.gpg
 1. **新增更多說明文件**
    - 在 GitHub 上新增 Issues 和 Discussions
    - 編寫貢獻指南 (CONTRIBUTING.md)
+   - 在 README 中補充 **tool calling** 使用方式（客戶端範例、Ollama 模型需求）
    - 建立 Release 版本
 
 2. **設定 GitHub Actions**
@@ -449,6 +456,6 @@ tar czf - ~/.ssh | gpg --symmetric --cipher-algo AES256 > ssh_backup.tar.gz.gpg
 
 ---
 
-**文檔版本**: 1.1  
-**最後更新**: 2026-03-13（新增 Q6：SSH Key 有效期與安全管理）  
+**文檔版本**: 1.2  
+**最後更新**: 2026-03-23（對齊 tool calling 功能：倉庫描述、驗證推送說明、提交範例與下一步）  
 **作者**: AI Assistant
