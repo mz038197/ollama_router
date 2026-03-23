@@ -1,6 +1,6 @@
 from typing import Any, AsyncGenerator
 
-from src.domain.entities.chat import ChatCompletionRequest
+from src.domain.entities.chat import ChatCompletionRequest, ChatMessage
 from src.domain.ports.api_key_repository import ApiKeyRepositoryPort
 from src.domain.ports.ollama_gateway import OllamaGatewayPort
 from src.domain.ports.request_log import RequestLogPort
@@ -44,7 +44,7 @@ class ApiUseCase:
             teacher_name=teacher_name,
             api_key=api_key or "未提供",
             model=req.model,
-            messages=[{"role": m.role, "content": m.content} for m in req.messages],
+            messages=[_message_to_log_dict(m) for m in req.messages],
             is_valid=is_valid,
         )
 
@@ -63,3 +63,14 @@ class ApiUseCase:
             messages=[],
             is_valid=is_valid,
         )
+
+
+def _message_to_log_dict(m: ChatMessage) -> dict[str, Any]:
+    d: dict[str, Any] = {"role": m.role, "content": m.content}
+    if m.tool_calls:
+        d["tool_calls"] = m.tool_calls
+    if m.tool_call_id:
+        d["tool_call_id"] = m.tool_call_id
+    if m.tool_name:
+        d["tool_name"] = m.tool_name
+    return d

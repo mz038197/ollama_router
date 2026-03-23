@@ -22,6 +22,8 @@ def _extract_content_and_images(content: Any, explicit_images: list[str] | None 
     1. 簡單格式：content 是字符串
     2. OpenAI 格式：content 是包含文本和影像物件的陣列
     """
+    if content is None:
+        return "", explicit_images if explicit_images else None
     images: list[str] = []
     for item in explicit_images or []:
         normalized = _normalize_image_value(item)
@@ -62,16 +64,22 @@ class ChatCompletionInputDto:
     max_tokens: int | None
     user: str | None
     stop: object | None
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: Any | None = None
 
     def to_domain(self) -> ChatCompletionRequest:
         domain_messages: list[ChatMessage] = []
         for m in self.messages:
-            content, images = _extract_content_and_images(m.get("content", ""), m.get("images"))
+            content, images = _extract_content_and_images(m.get("content"), m.get("images"))
             domain_messages.append(
                 ChatMessage(
                     role=m.get("role", ""),
                     content=content,
                     images=images,
+                    tool_calls=m.get("tool_calls"),
+                    tool_call_id=m.get("tool_call_id"),
+                    tool_name=m.get("tool_name"),
+                    name=m.get("name"),
                 )
             )
 
@@ -83,4 +91,6 @@ class ChatCompletionInputDto:
             max_tokens=self.max_tokens,
             user=self.user,
             stop=self.stop,
+            tools=self.tools,
+            tool_choice=self.tool_choice,
         )
