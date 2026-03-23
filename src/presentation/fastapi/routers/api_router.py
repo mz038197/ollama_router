@@ -45,6 +45,8 @@ def create_api_router(api_use_case: ApiUseCase) -> APIRouter:
             max_tokens=req.max_tokens,
             user=req.user,
             stop=req.stop,
+            tools=req.tools,
+            tool_choice=req.tool_choice,
         )
         domain_req = input_dto.to_domain()
 
