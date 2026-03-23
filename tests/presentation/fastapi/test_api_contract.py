@@ -315,3 +315,67 @@ def test_chat_completion_with_simple_text_format(fake_repo, fake_gateway, fake_l
     assert response.status_code == 200
     payload = response.json()
     assert payload["object"] == "chat.completion"
+
+
+def test_chat_completion_forwards_tools_to_gateway(fake_repo, fake_gateway, fake_logger):
+    """驗證 tools / tool_choice 會傳入 use case 與 gateway（domain 請求）。"""
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "description": "天氣",
+                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+            },
+        }
+    ]
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer valid-key"},
+        json={
+            "model": "fake-model",
+            "messages": [{"role": "user", "content": "台北天氣"}],
+            "stream": False,
+            "tools": tools,
+            "tool_choice": "auto",
+        },
+    )
+    assert response.status_code == 200
+    assert fake_gateway.last_nonstream_req is not None
+    assert fake_gateway.last_nonstream_req.tools == tools
+    assert fake_gateway.last_nonstream_req.tool_choice == "auto"
+
+
+def test_chat_completion_accepts_assistant_with_tool_calls_only(fake_repo, fake_gateway, fake_logger):
+    """驗證 OpenAI 風格：assistant 僅含 tool_calls 時可通過驗證。"""
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer valid-key"},
+        json={
+            "model": "fake-model",
+            "messages": [
+                {"role": "user", "content": "查天氣"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "get_weather", "arguments": '{"city":"TPE"}'},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call_1", "content": "25C"},
+            ],
+            "stream": False,
+        },
+    )
+    assert response.status_code == 200
+    assert fake_gateway.last_nonstream_req is not None
+    msgs = fake_gateway.last_nonstream_req.messages
+    assert msgs[1].tool_calls is not None
+    assert msgs[2].role == "tool"
+    assert msgs[2].tool_call_id == "call_1"
