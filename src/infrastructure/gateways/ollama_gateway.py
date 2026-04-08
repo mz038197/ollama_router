@@ -130,14 +130,36 @@ def tool_calls_ollama_to_openai(ollama_calls: list[dict[str, Any]] | None) -> li
     return result
 
 
+def _assistant_visible_text(message: dict[str, Any]) -> str:
+    """Ollama 回傳的助理文字；thinking 模型可能只填 thinking/reasoning。"""
+    raw = message.get("content")
+    if raw is None:
+        text = ""
+    elif isinstance(raw, str):
+        text = raw
+    else:
+        text = str(raw)
+    if text.strip():
+        return text
+    for key in ("thinking", "reasoning"):
+        alt = message.get(key)
+        if isinstance(alt, str) and alt.strip():
+            return alt
+    return text
+
+
 def extract_ollama_message_fields(data: dict[str, Any]) -> tuple[str, list[dict[str, Any]] | None]:
     message = data.get("message", {})
     if not isinstance(message, dict):
         return "", None
-    content = message.get("content") or ""
     tool_calls = message.get("tool_calls")
     if not tool_calls:
         tool_calls = None
+    if tool_calls:
+        raw = message.get("content")
+        content = "" if raw is None else (raw if isinstance(raw, str) else str(raw))
+    else:
+        content = _assistant_visible_text(message)
     return content, tool_calls
 
 
@@ -148,7 +170,7 @@ class OllamaGateway:
         timeout: float = 300.0,
         max_concurrent_per_backend: int = 1,
         default_temperature: float = 0.7,
-        default_num_predict: int = 256,
+        default_num_predict: int = 4096,
     ):
         self.backends = [
             BackendState(
@@ -222,6 +244,8 @@ class OllamaGateway:
             "model": req.model,
             "messages": build_ollama_messages(req),
             "stream": req.stream,
+            # OpenAI 相容客戶端預期回在 message.content；關閉 think 避免推理塞滿 num_predict 導致 content 空。
+            "think": False,
             "options": {
                 "temperature": req.temperature if req.temperature is not None else self.default_temperature,
                 "num_predict": req.max_tokens if req.max_tokens is not None else self.default_num_predict,
@@ -328,6 +352,10 @@ class OllamaGateway:
                     if "message" in obj and isinstance(obj["message"], dict):
                         msg_obj = obj["message"]
                         piece = msg_obj.get("content", "") or ""
+                        if not piece:
+                            piece = msg_obj.get("thinking", "") or ""
+                        if not piece:
+                            piece = msg_obj.get("reasoning", "") or ""
                         tcs = msg_obj.get("tool_calls")
                         if tcs:
                             accumulated_tool_calls = merge_tool_calls_stream(accumulated_tool_calls, tcs)

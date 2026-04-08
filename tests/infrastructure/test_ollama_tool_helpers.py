@@ -4,6 +4,7 @@ import json
 from src.domain.entities.chat import ChatCompletionRequest, ChatMessage
 from src.infrastructure.gateways.ollama_gateway import (
     build_ollama_messages,
+    extract_ollama_message_fields,
     merge_tool_calls_stream,
     normalize_tool_call_for_ollama,
     resolve_tool_name_from_tool_call_id,
@@ -73,6 +74,52 @@ def test_resolve_tool_name_from_assistant_tool_calls():
     req = ChatCompletionRequest(model="m", messages=msgs, stream=False)
     name = resolve_tool_name_from_tool_call_id("call_abc", req.messages, 2)
     assert name == "foo"
+
+
+def test_extract_ollama_message_fields_falls_back_to_thinking_when_content_empty():
+    data = {
+        "message": {
+            "role": "assistant",
+            "content": "",
+            "thinking": "internal reasoning…\nfinal answer line",
+        }
+    }
+    content, tcs = extract_ollama_message_fields(data)
+    assert "final answer line" in content
+    assert tcs is None
+
+
+def test_extract_ollama_message_fields_falls_back_to_reasoning():
+    data = {"message": {"role": "assistant", "content": "", "reasoning": "Canberra"}}
+    content, tcs = extract_ollama_message_fields(data)
+    assert content == "Canberra"
+    assert tcs is None
+
+
+def test_extract_ollama_message_fields_prefers_content_when_both_present():
+    data = {
+        "message": {
+            "role": "assistant",
+            "content": "visible",
+            "thinking": "hidden",
+        }
+    }
+    content, _ = extract_ollama_message_fields(data)
+    assert content == "visible"
+
+
+def test_extract_ollama_message_fields_does_not_replace_with_thinking_when_tool_calls():
+    data = {
+        "message": {
+            "role": "assistant",
+            "content": "",
+            "thinking": "only thinking",
+            "tool_calls": [{"type": "function", "function": {"name": "f"}}],
+        }
+    }
+    content, tcs = extract_ollama_message_fields(data)
+    assert content == ""
+    assert tcs is not None
 
 
 def test_build_ollama_messages_includes_tools_and_tool_role():
