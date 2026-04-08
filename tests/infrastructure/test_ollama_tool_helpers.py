@@ -31,7 +31,18 @@ def test_tool_calls_ollama_to_openai_converts_arguments_to_string():
     openai = tool_calls_ollama_to_openai(ollama)
     assert openai is not None
     assert openai[0]["function"]["name"] == "get_x"
+    assert isinstance(openai[0]["function"]["arguments"], str)
     assert json.loads(openai[0]["function"]["arguments"]) == {"city": "NYC"}
+
+
+def test_tool_calls_ollama_to_openai_stringifies_without_type_field():
+    """Ollama 有時不帶 type=function；仍須輸出 OpenAI 規範的 arguments 字串。"""
+    ollama = [{"function": {"name": "f", "arguments": {"x": 1}}}]
+    openai = tool_calls_ollama_to_openai(ollama)
+    assert openai is not None
+    assert openai[0]["type"] == "function"
+    assert isinstance(openai[0]["function"]["arguments"], str)
+    assert json.loads(openai[0]["function"]["arguments"]) == {"x": 1}
 
 
 def test_merge_tool_calls_stream_merges_by_index():

@@ -95,22 +95,29 @@ def merge_tool_calls_stream(
     return [by_idx[k] for k in sorted(by_idx.keys())]
 
 
+def _function_arguments_to_openai_string(args: Any) -> str:
+    """OpenAI ChatCompletionMessageToolCall.function.arguments 必須為 JSON 字串。"""
+    if isinstance(args, str):
+        return args
+    if isinstance(args, dict):
+        return json.dumps(args, ensure_ascii=False)
+    if args is None:
+        return "{}"
+    return json.dumps(args, ensure_ascii=False)
+
+
 def tool_calls_ollama_to_openai(ollama_calls: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
     if not ollama_calls:
         return None
     result: list[dict[str, Any]] = []
     for tc in ollama_calls:
-        oid = tc.get("id") or f"call_{uuid.uuid4().hex[:24]}"
-        if tc.get("type") == "function" and isinstance(tc.get("function"), dict):
-            fn = tc["function"]
+        if not isinstance(tc, dict):
+            continue
+        fn = tc.get("function")
+        if isinstance(fn, dict):
+            oid = tc.get("id") or f"call_{uuid.uuid4().hex[:24]}"
             name = fn.get("name", "")
-            args = fn.get("arguments")
-            if isinstance(args, dict):
-                args_str = json.dumps(args, ensure_ascii=False)
-            elif isinstance(args, str):
-                args_str = args
-            else:
-                args_str = json.dumps(args, ensure_ascii=False) if args is not None else "{}"
+            args_str = _function_arguments_to_openai_string(fn.get("arguments"))
             result.append(
                 {
                     "id": oid,
