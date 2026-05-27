@@ -68,7 +68,7 @@ class ChatCompletionsRequestSchema(BaseModel):
     messages: list[ChatMessageSchema]
     stream: bool = False
     temperature: float | None = 0.7
-    max_tokens: int | None = 4096
+    max_tokens: int | None = 200000
     user: str | None = None
     stop: Any | None = None
     tools: list[dict[str, Any]] | None = None

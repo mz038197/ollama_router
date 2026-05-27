@@ -170,7 +170,7 @@ class OllamaGateway:
         timeout: float = 300.0,
         max_concurrent_per_backend: int = 1,
         default_temperature: float = 0.7,
-        default_num_predict: int = 4096,
+        default_num_predict: int = 200000,
     ):
         self.backends = [
             BackendState(
