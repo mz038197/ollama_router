@@ -314,6 +314,7 @@ class OllamaGateway:
         created = int(time.time())
         started = time.perf_counter()
         accumulated_tool_calls: list[dict[str, Any]] = []
+        stream_finished = False
 
         try:
             assert self.client is not None
@@ -390,7 +391,30 @@ class OllamaGateway:
                         yield sse(final_chunk)
                         yield b"data: [DONE]\n\n"
                         success = True
+                        stream_finished = True
                         break
+
+                if not stream_finished:
+                    openai_tc = tool_calls_ollama_to_openai(accumulated_tool_calls)
+                    if openai_tc:
+                        tc_chunk = make_openai_stream_chunk(
+                            request_id=request_id,
+                            created=created,
+                            model=req.model,
+                            delta={"tool_calls": openai_tc},
+                        )
+                        yield sse(tc_chunk)
+                    finish = "tool_calls" if openai_tc else "stop"
+                    final_chunk = make_openai_stream_chunk(
+                        request_id=request_id,
+                        created=created,
+                        model=req.model,
+                        delta={},
+                        finish_reason=finish,
+                    )
+                    yield sse(final_chunk)
+                    yield b"data: [DONE]\n\n"
+                    success = True
         except UpstreamServiceError:
             await self._release_backend(backend, success=False)
             released = True

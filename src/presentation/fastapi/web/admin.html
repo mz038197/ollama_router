@@ -521,9 +521,25 @@
         }
 
         .logs-message-preview {
-            max-width: 340px;
+            max-width: 420px;
+            max-height: 120px;
+            overflow: auto;
+            white-space: pre-wrap;
             word-break: break-word;
             color: #444;
+        }
+
+        .log-detail-pre {
+            max-height: 60vh;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #f8f9fa;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 12px;
+            font-size: 13px;
+            line-height: 1.5;
         }
     </style>
 </head>
@@ -599,11 +615,13 @@
                         <thead>
                             <tr>
                                 <th>時間</th>
+                                <th>IP</th>
                                 <th>教師</th>
                                 <th>模型</th>
                                 <th>驗證</th>
                                 <th>API Key</th>
                                 <th>訊息預覽</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="logsTableBody">
@@ -653,6 +671,19 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeAddKeyModal()">取消</button>
                 <button class="btn btn-primary" id="keyModalConfirmBtn" onclick="confirmAddKey()">新增</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 完整 Log Modal -->
+    <div class="modal" id="logDetailModal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">完整請求內容</div>
+            <div class="modal-body">
+                <pre class="log-detail-pre" id="logDetailContent"></pre>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeLogDetailModal()">關閉</button>
             </div>
         </div>
     </div>
@@ -1141,21 +1172,81 @@
             }
         }
 
+        function formatLogPreview(item) {
+            return item.message_preview || '';
+        }
+
+        function formatLogDetailMessages(detail) {
+            const messages = detail.messages || [];
+            if (!messages.length) {
+                return '（無 messages）';
+            }
+            return messages
+                .map((msg) => `[${msg.role || 'unknown'}]\n${msg.content || ''}`)
+                .join('\n\n');
+        }
+
+        function closeLogDetailModal() {
+            document.getElementById('logDetailModal').classList.remove('show');
+            document.getElementById('logDetailContent').textContent = '';
+        }
+
+        async function showLogDetail(requestId) {
+            if (!requestId) return;
+
+            const dateInput = document.getElementById('logDate').value;
+            const date = dateInput ? dateInput.replaceAll('-', '') : '';
+            const query = date ? `?date=${encodeURIComponent(date)}` : '';
+
+            try {
+                const response = await fetch(`/api/admin/logs/${encodeURIComponent(requestId)}${query}`);
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data?.detail?.message || '載入完整 log 失敗');
+                }
+
+                const meta = [
+                    `request_id: ${data.request_id || requestId}`,
+                    `timestamp: ${data.timestamp || '-'}`,
+                    `client_ip: ${data.client_ip || '-'}`,
+                    `teacher: ${data.teacher || '-'}`,
+                    `model: ${data.model || '-'}`,
+                    `validation_result: ${data.validation_result || '-'}`,
+                    '',
+                    '--- messages ---',
+                    '',
+                ].join('\n');
+
+                document.getElementById('logDetailContent').textContent = meta + formatLogDetailMessages(data);
+                document.getElementById('logDetailModal').classList.add('show');
+            } catch (error) {
+                showMessage('載入完整 log 失敗: ' + error.message, 'error');
+            }
+        }
+
         function renderLogs(items, append = false) {
             const tbody = document.getElementById('logsTableBody');
-            const rows = (items || []).map((item) => `
+            const rows = (items || []).map((item) => {
+                const detailBtn = item.request_id
+                    ? `<button type="button" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="showLogDetail('${item.request_id}')">查看完整</button>`
+                    : '<span style="color:#999;">—</span>';
+
+                return `
                 <tr>
                     <td>${item.timestamp || '-'}</td>
+                    <td>${escapeHtml(item.client_ip || '-')}</td>
                     <td>${item.teacher || '-'}</td>
                     <td>${item.model || '-'}</td>
                     <td>${item.validation_result || '-'}</td>
                     <td><div class="key-value-masked">${escapeHtml(maskApiKey(item.api_key || '')) || '—'}</div></td>
-                    <td><div class="logs-message-preview">${item.message_preview || ''}</div></td>
+                    <td><div class="logs-message-preview">${escapeHtml(formatLogPreview(item))}</div></td>
+                    <td>${detailBtn}</td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
 
             if (!rows && !append) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999;">尚無資料</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#999;">尚無資料</td></tr>';
                 return;
             }
 

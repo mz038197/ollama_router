@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from src.application.use_cases.admin_use_case import AdminUseCase
 from src.application.use_cases.api_use_case import ApiUseCase
 from src.application.use_cases.auth_use_case import AuthUseCase
+from src.domain.errors import UpstreamServiceError
 from src.presentation.fastapi.error_handlers import register_error_handlers
 from src.presentation.fastapi.middleware.api_key_middleware import ApiKeyMiddleware
 from src.presentation.fastapi.routers.admin_router import create_admin_router
@@ -49,7 +50,10 @@ def test_chat_completion_rejects_when_api_key_missing(fake_repo, fake_gateway, f
         json={"model": "fake-model", "messages": [{"role": "user", "content": "hello"}]},
     )
     assert response.status_code == 401
-    assert response.json() == {"detail": "無效的 API 金鑰"}
+    payload = response.json()
+    assert "error" in payload
+    assert payload["error"]["message"] == "無效的 API 金鑰"
+    assert "detail" not in payload
     # 驗證無效的認證嘗試被記錄到審計追蹤
     assert len(fake_logger.entries) > 0
     # 檢查最後一次記錄是無效的認證
@@ -65,7 +69,10 @@ def test_chat_completion_rejects_when_api_key_invalid(fake_repo, fake_gateway, f
         json={"model": "fake-model", "messages": [{"role": "user", "content": "hello"}]},
     )
     assert response.status_code == 401
-    assert response.json() == {"detail": "無效的 API 金鑰"}
+    payload = response.json()
+    assert "error" in payload
+    assert payload["error"]["message"] == "無效的 API 金鑰"
+    assert "detail" not in payload
     # 驗證無效的認證嘗試被記錄到審計追蹤
     assert len(fake_logger.entries) > 0
     # 檢查最後一次記錄是無效的認證
@@ -103,6 +110,61 @@ def test_chat_completion_stream_contract(fake_repo, fake_gateway, fake_logger):
         assert "data: [DONE]" in body
 
 
+def test_chat_completion_upstream_error_nonstream_openai_format(fake_repo, fake_gateway, fake_logger):
+    async def failing_nonstream(_req):
+        raise UpstreamServiceError(
+            status_code=502,
+            backend="http://127.0.0.1:11434",
+            body="upstream failed",
+        )
+
+    fake_gateway.chat_completions_nonstream = failing_nonstream
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer valid-key"},
+        json={"model": "fake-model", "messages": [{"role": "user", "content": "hello"}], "stream": False},
+    )
+    assert response.status_code == 502
+    payload = response.json()
+    assert payload["error"]["message"] == "Ollama backend error"
+    assert payload["error"]["type"] == "server_error"
+    assert "detail" not in payload
+
+
+def test_chat_completion_upstream_error_stream_openai_sse(fake_repo, fake_gateway, fake_logger):
+    async def failing_stream(_req):
+        raise UpstreamServiceError(
+            status_code=502,
+            backend="http://127.0.0.1:11434",
+            body="upstream failed",
+        )
+        yield b""  # pragma: no cover
+
+    fake_gateway.chat_completions_stream = failing_stream
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    with client.stream(
+        "POST",
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer valid-key"},
+        json={"model": "fake-model", "messages": [{"role": "user", "content": "hello"}], "stream": True},
+    ) as response:
+        body = b"".join(response.iter_bytes()).decode("utf-8")
+        assert response.status_code == 200
+        assert '"error"' in body
+        assert "Ollama backend error" in body
+        assert "'error'" not in body
+
+
+def test_admin_log_detail_not_found_still_uses_detail_format(fake_repo, fake_gateway, fake_logger):
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    response = client.get("/api/admin/logs/not-found-id")
+    assert response.status_code == 404
+    payload = response.json()
+    assert "detail" in payload
+    assert "error" not in payload or "message" in payload.get("detail", {})
+
+
 def test_admin_panel_contract(fake_repo, fake_gateway, fake_logger):
     client = build_test_client(fake_repo, fake_gateway, fake_logger)
     response = client.get("/")
@@ -135,6 +197,28 @@ def test_admin_logs_contract(fake_repo, fake_gateway, fake_logger):
     assert "total" in payload
     assert "has_more" in payload
     assert isinstance(payload["items"], list)
+
+
+def test_admin_log_detail_contract(fake_repo, fake_gateway, fake_logger):
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer valid-key"},
+        json={"model": "fake-model", "messages": [{"role": "user", "content": "detail me"}], "stream": False},
+    )
+
+    list_response = client.get("/api/admin/logs?limit=10")
+    request_id = list_response.json()["items"][0]["request_id"]
+    assert request_id
+
+    detail_response = client.get(f"/api/admin/logs/{request_id}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["request_id"] == request_id
+    assert detail["messages"][0]["content"] == "detail me"
+
+    missing_response = client.get("/api/admin/logs/not-found-id")
+    assert missing_response.status_code == 404
 
 
 def test_admin_teacher_add_contract(fake_repo, fake_gateway, fake_logger):

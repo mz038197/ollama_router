@@ -8,21 +8,37 @@ from src.domain.errors import (
     ServiceUnavailableError,
     UpstreamServiceError,
 )
+from src.presentation.fastapi.openai_errors import (
+    is_chat_completions_path,
+    make_openai_error_body,
+    openai_error_response,
+)
 
 
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AuthenticationError)
-    async def handle_authentication_error(_: Request, exc: AuthenticationError):
-        # 維持既有對外格式：{"detail": "..."}
+    async def handle_authentication_error(request: Request, exc: AuthenticationError):
+        if is_chat_completions_path(request.url.path):
+            return openai_error_response(
+                exc.status_code,
+                exc.message,
+                error_type="invalid_request_error",
+                code="invalid_api_key",
+            )
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.message},
         )
 
     @app.exception_handler(UpstreamServiceError)
-    async def handle_upstream_error(_: Request, exc: UpstreamServiceError):
+    async def handle_upstream_error(request: Request, exc: UpstreamServiceError):
+        if is_chat_completions_path(request.url.path):
+            return openai_error_response(
+                exc.status_code,
+                exc.message,
+                error_type="server_error",
+            )
         details = exc.details or {}
-        # 維持既有對外格式：detail 為 object
         return JSONResponse(
             status_code=exc.status_code,
             content={
@@ -35,7 +51,13 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(ServiceUnavailableError)
-    async def handle_service_unavailable(_: Request, exc: ServiceUnavailableError):
+    async def handle_service_unavailable(request: Request, exc: ServiceUnavailableError):
+        if is_chat_completions_path(request.url.path):
+            return openai_error_response(
+                exc.status_code,
+                exc.message,
+                error_type="server_error",
+            )
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.message},
@@ -54,7 +76,16 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=exc.status_code, content=payload)
 
     @app.exception_handler(AppError)
-    async def handle_app_error(_: Request, exc: AppError):
+    async def handle_app_error(request: Request, exc: AppError):
+        if is_chat_completions_path(request.url.path):
+            return JSONResponse(
+                status_code=exc.status_code,
+                content=make_openai_error_body(
+                    exc.message,
+                    error_type="api_error",
+                    code=exc.code,
+                ),
+            )
         payload = {"detail": exc.message}
         if exc.details is not None:
             payload["error"] = {"code": exc.code, "details": exc.details}

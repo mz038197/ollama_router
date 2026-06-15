@@ -50,6 +50,13 @@ def create_admin_router(admin_use_case: AdminUseCase) -> APIRouter:
             offset=offset,
         )
 
+    @router.get("/api/admin/logs/{request_id}")
+    async def get_admin_log_detail(
+        request_id: str,
+        date: str | None = Query(default=None, description="查詢日期，格式 YYYYMMDD"),
+    ):
+        return admin_use_case.get_log_detail(request_id=request_id, date=date)
+
     @router.post("/api/admin/teacher/add", status_code=201)
     async def add_teacher_admin(data: AddTeacherRequest):
         teacher_name = data.name.strip()

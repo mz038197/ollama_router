@@ -18,6 +18,8 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
 - `POST /v1/chat/completions`
 - `GET /`
 - `GET /api/admin/config`
+- `GET /api/admin/logs`
+- `GET /api/admin/logs/{request_id}`
 - `POST /api/admin/teacher/add`
 - `POST /api/admin/teacher/delete`
 - `POST /api/admin/key/add`
@@ -67,6 +69,12 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
   - 若已配置金鑰：需提供有效且 `enabled=true` 的 key，否則回傳 `401`
 
 配置檔路徑：`~/.ollama_router/apikeyConfig.json`
+
+### Chat Completions 錯誤回應
+
+- `/v1/chat/completions` 錯誤時回 **OpenAI 格式**：`{"error": {"message", "type", "param", "code"}}`
+- 串流錯誤以 SSE 送出：`data: {"error": ...}`
+- Admin API 仍使用 FastAPI 風格：`{"detail": ...}`
 
 ## Clean Architecture（Phase 1）
 
@@ -129,15 +137,31 @@ DEFAULT_TEMPERATURE = 0.7
 
 ## 日誌
 
-日誌輸出路徑：`~/.ollama_router/log_YYYYMMDD.log`
+採用**摘要檔 + 完整備份檔**雙檔架構：
 
-內容包含：
-- timestamp（UTC+8）
-- teacher
-- api_key（截斷）
-- model
-- validation_result
-- message_preview
+| 檔案 | 用途 |
+|------|------|
+| `~/.ollama_router/logs/log_YYYYMMDD.log` | 日常查看（`tail -f`、admin 列表） |
+| `~/.ollama_router/logs/full/log_YYYYMMDD.log` | 除錯用完整 `messages` 備份 |
+
+兩檔以 `request_id` 對應。摘要檔欄位：
+
+- `request_id`、`timestamp`、`client_ip`
+- `teacher`、`api_key`（截斷）、`model`
+- `validation_result`、`message_count`、`total_chars`
+- `message_preview`（精簡預覽，優先抽取 `<userRequest>` / `<user_query>`）
+
+完整檔含完整 `messages`（僅請求輸入，不含模型回覆）。
+
+```bash
+# 日常監控
+tail -f ~/.ollama_router/logs/log_$(date +%Y%m%d).log
+
+# 除錯完整內容
+grep '<request_id>' ~/.ollama_router/logs/full/log_$(date +%Y%m%d).log | jq .
+```
+
+Admin API：`GET /api/admin/logs/{request_id}?date=YYYYMMDD`
 
 ## 測試與檢查
 

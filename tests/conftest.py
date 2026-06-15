@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 from pathlib import Path
 import sys
+import uuid
 from typing import Any
 
 import pytest
@@ -10,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.domain.entities.chat import ChatCompletionRequest, ChatMessage
+from src.infrastructure.logging.file_request_logger import _build_message_preview
 
 
 class FakeApiKeyRepository:
@@ -100,16 +102,37 @@ class FakeRequestLogger:
         model: str,
         messages: list[dict[str, Any]],
         is_valid: bool,
+        client_ip: str | None = None,
     ) -> None:
+        request_id = str(uuid.uuid4())
         self.entries.append(
             {
+                "request_id": request_id,
                 "teacher_name": teacher_name,
                 "api_key": api_key,
                 "model": model,
                 "messages": messages,
                 "is_valid": is_valid,
+                "client_ip": client_ip or "unknown",
+                "message_preview": _build_message_preview(messages),
             }
         )
+
+    def get_log_detail(self, request_id: str, date: str | None = None) -> dict[str, Any] | None:
+        for entry in self.entries:
+            if entry.get("request_id") == request_id:
+                return {
+                    "request_id": entry["request_id"],
+                    "timestamp": "2026-03-13 00:00:00",
+                    "client_ip": entry.get("client_ip", "unknown"),
+                    "teacher": entry.get("teacher_name") or "未知",
+                    "api_key": entry.get("api_key", ""),
+                    "model": entry.get("model", ""),
+                    "is_valid": entry.get("is_valid", False),
+                    "validation_result": "通過" if entry.get("is_valid") else "拒絕",
+                    "messages": entry.get("messages") or [],
+                }
+        return None
 
     def query_logs(
         self,
@@ -124,10 +147,8 @@ class FakeRequestLogger:
         matched = []
         keyword_filter = keyword.strip().lower() if keyword else None
         for entry in self.entries:
-            message_preview = ""
+            message_preview = entry.get("message_preview", "")
             messages = entry.get("messages") or []
-            if messages:
-                message_preview = str(messages[-1].get("content", ""))
 
             if teacher and entry.get("teacher_name") != teacher:
                 continue
@@ -135,13 +156,16 @@ class FakeRequestLogger:
                 continue
             if is_valid is not None and bool(entry.get("is_valid")) is not is_valid:
                 continue
-            if keyword_filter:
-                if keyword_filter not in message_preview.lower():
-                    continue
+            if keyword_filter and keyword_filter not in "\n".join(
+                [message_preview] + [str(msg.get("content", "")) for msg in messages]
+            ).lower():
+                continue
 
             matched.append(
                 {
+                    "request_id": entry.get("request_id"),
                     "timestamp": "2026-03-13 00:00:00",
+                    "client_ip": entry.get("client_ip", "unknown"),
                     "teacher": entry.get("teacher_name") or "未知",
                     "api_key": entry.get("api_key", ""),
                     "model": entry.get("model", ""),

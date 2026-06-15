@@ -9,6 +9,7 @@ class RequestLogPort(Protocol):
         model: str,
         messages: list[dict[str, Any]],
         is_valid: bool,
+        client_ip: str | None = None,
     ) -> None:
         ...
 
@@ -22,4 +23,7 @@ class RequestLogPort(Protocol):
         limit: int = 50,
         offset: int = 0,
     ) -> dict[str, Any]:
+        ...
+
+    def get_log_detail(self, request_id: str, date: str | None = None) -> dict[str, Any] | None:
         ...

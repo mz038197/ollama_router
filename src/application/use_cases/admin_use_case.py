@@ -43,6 +43,23 @@ class AdminUseCase:
             offset=safe_offset,
         )
 
+    def get_log_detail(self, request_id: str, date: str | None = None) -> dict[str, Any]:
+        if not self.request_logger:
+            raise AdminBusinessError(
+                message="日誌服務未啟用",
+                code="ADMIN_LOG_NOT_AVAILABLE",
+                status_code=503,
+            )
+
+        detail = self.request_logger.get_log_detail(request_id, date=date)
+        if detail is None:
+            raise AdminBusinessError(
+                message=f"找不到請求記錄: {request_id}",
+                code="ADMIN_LOG_NOT_FOUND",
+                status_code=404,
+            )
+        return detail
+
     def add_teacher(self, teacher_name: str) -> dict[str, Any]:
         self.api_key_repo.add_teacher(teacher_name)
         return {"success": True, "message": f"已新增教師: {teacher_name}"}

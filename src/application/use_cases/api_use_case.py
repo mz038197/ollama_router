@@ -23,16 +23,22 @@ class ApiUseCase:
     async def models(self) -> dict[str, Any]:
         return await self.gateway.models()
 
-    async def chat_nonstream(self, req: ChatCompletionRequest, api_key: str | None) -> dict[str, Any]:
-        self._log_request(req, api_key)
+    async def chat_nonstream(
+        self, req: ChatCompletionRequest, api_key: str | None, client_ip: str | None = None
+    ) -> dict[str, Any]:
+        self._log_request(req, api_key, client_ip)
         return await self.gateway.chat_completions_nonstream(req)
 
-    async def chat_stream(self, req: ChatCompletionRequest, api_key: str | None) -> AsyncGenerator[bytes, None]:
-        self._log_request(req, api_key)
+    async def chat_stream(
+        self, req: ChatCompletionRequest, api_key: str | None, client_ip: str | None = None
+    ) -> AsyncGenerator[bytes, None]:
+        self._log_request(req, api_key, client_ip)
         async for chunk in self.gateway.chat_completions_stream(req):
             yield chunk
 
-    def _log_request(self, req: ChatCompletionRequest, api_key: str | None) -> None:
+    def _log_request(
+        self, req: ChatCompletionRequest, api_key: str | None, client_ip: str | None = None
+    ) -> None:
         api_key_value = api_key or ""
         teacher_name: str | None = None
         is_valid = True
@@ -46,9 +52,10 @@ class ApiUseCase:
             model=req.model,
             messages=[_message_to_log_dict(m) for m in req.messages],
             is_valid=is_valid,
+            client_ip=client_ip,
         )
 
-    def log_invalid_auth(self, api_key: str) -> None:
+    def log_invalid_auth(self, api_key: str, client_ip: str | None = None) -> None:
         """記錄無效的認證嘗試，供安全審計追蹤。"""
         teacher_name: str | None = None
         is_valid = False
@@ -62,6 +69,7 @@ class ApiUseCase:
             model="N/A",
             messages=[],
             is_valid=is_valid,
+            client_ip=client_ip,
         )
 
 
