@@ -1,6 +1,6 @@
 # Ollama Router - OpenAI 相容負載平衡器
 
-提供 OpenAI 相容 API（`/v1/chat/completions`、`/v1/models`），並支援多個 Ollama 後端負載平衡、API 金鑰驗證、日誌記錄與 Admin 管理面板。
+提供 OpenAI 相容 API（`/v1/chat/completions`、`/v1/responses`、`/v1/models`），並支援多個 Ollama 後端負載平衡、API 金鑰驗證、日誌記錄與 Admin 管理面板。
 
 ## 快速開始
 
@@ -16,6 +16,7 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
 - `GET /health`
 - `GET /v1/models`
 - `POST /v1/chat/completions`
+- `POST /v1/responses`
 - `GET /`
 - `GET /api/admin/config`
 - `GET /api/admin/logs`
@@ -60,7 +61,7 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
 
 ## API 金鑰驗證
 
-- 驗證路徑：`/v1/chat/completions`
+- 驗證路徑：`/v1/chat/completions`、`/v1/responses`
 - 讀取順序：
   1. `Authorization: Bearer <token>`
   2. `X-API-Key: <token>`
@@ -72,9 +73,17 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
 
 ### Chat Completions 錯誤回應
 
-- `/v1/chat/completions` 錯誤時回 **OpenAI 格式**：`{"error": {"message", "type", "param", "code"}}`
+- `/v1/chat/completions` 與 `/v1/responses` 錯誤時回 **OpenAI 格式**：`{"error": {"message", "type", "param", "code"}}`
 - 串流錯誤以 SSE 送出：`data: {"error": ...}`
 - Admin API 仍使用 FastAPI 風格：`{"detail": ...}`
+
+### VS Code Copilot BYOK（`/v1/responses`）
+
+Copilot 請使用 **`POST /v1/responses`**（非 `/v1/chat/completions`），並在 `chatLanguageModels.json` 設 `zeroDataRetentionEnabled: true`（Ollama 不支援 `previous_response_id`）。
+
+完整設定、reasoning effort 說明與故障排除：**[guide/VSCODE_COPILOT_BYOK.md](guide/VSCODE_COPILOT_BYOK.md)**
+
+`/v1/chat/completions` 仍保留給 Streamlit 等舊 client（預設 `think: false`）。
 
 ## Clean Architecture（Phase 1）
 
