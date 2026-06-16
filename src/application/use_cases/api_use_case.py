@@ -1,9 +1,11 @@
 from typing import Any, AsyncGenerator
 
+from src.domain.errors import StatefulResponsesNotSupportedError
 from src.domain.entities.chat import ChatCompletionRequest, ChatMessage
 from src.domain.ports.api_key_repository import ApiKeyRepositoryPort
 from src.domain.ports.ollama_gateway import OllamaGatewayPort
 from src.domain.ports.request_log import RequestLogPort
+from src.infrastructure.gateways.responses_helpers import responses_input_for_log
 
 
 class ApiUseCase:
@@ -35,6 +37,51 @@ class ApiUseCase:
         self._log_request(req, api_key, client_ip)
         async for chunk in self.gateway.chat_completions_stream(req):
             yield chunk
+
+    def validate_responses_request(self, body: dict[str, Any]) -> None:
+        self._validate_responses_body(body)
+
+    async def responses_create(
+        self, body: dict[str, Any], api_key: str | None, client_ip: str | None = None
+    ) -> dict[str, Any]:
+        self._validate_responses_body(body)
+        self._log_responses_request(body, api_key, client_ip)
+        return await self.gateway.responses_create(body)
+
+    async def responses_create_stream(
+        self, body: dict[str, Any], api_key: str | None, client_ip: str | None = None
+    ) -> AsyncGenerator[bytes, None]:
+        self._validate_responses_body(body)
+        self._log_responses_request(body, api_key, client_ip)
+        async for chunk in self.gateway.responses_create_stream(body):
+            yield chunk
+
+    def _validate_responses_body(self, body: dict[str, Any]) -> None:
+        previous_response_id = body.get("previous_response_id")
+        if previous_response_id not in (None, ""):
+            raise StatefulResponsesNotSupportedError()
+
+    def _log_responses_request(
+        self, body: dict[str, Any], api_key: str | None, client_ip: str | None = None
+    ) -> None:
+        model = body.get("model")
+        model_name = model if isinstance(model, str) else "N/A"
+        messages = responses_input_for_log(body)
+        api_key_value = api_key or ""
+        teacher_name: str | None = None
+        is_valid = True
+
+        if self.api_key_repo.is_enabled():
+            is_valid, teacher_name = self.api_key_repo.verify_api_key(api_key_value)
+
+        self.logger.log_validation_result(
+            teacher_name=teacher_name,
+            api_key=api_key or "未提供",
+            model=model_name,
+            messages=messages,
+            is_valid=is_valid,
+            client_ip=client_ip,
+        )
 
     def _log_request(
         self, req: ChatCompletionRequest, api_key: str | None, client_ip: str | None = None

@@ -12,7 +12,7 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         self.auth_use_case = auth_use_case
 
     async def dispatch(self, request: Request, call_next):
-        if request.url.path == "/v1/chat/completions":
+        if request.url.path in ("/v1/chat/completions", "/v1/responses"):
             api_key = None
             auth_header = request.headers.get("Authorization", "")
             if auth_header.startswith("Bearer "):

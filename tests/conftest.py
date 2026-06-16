@@ -206,6 +206,20 @@ class FakeOllamaGateway:
             b'data: {"id":"chatcmpl-fake","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}\n\n',
             b"data: [DONE]\n\n",
         ]
+        self.last_responses_body: dict[str, Any] | None = None
+        self.responses_response = {
+            "id": "resp_fake",
+            "object": "response",
+            "status": "completed",
+            "output": [
+                {"type": "reasoning", "summary": [{"type": "summary_text", "text": "thinking"}]},
+                {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "hello"}]},
+            ],
+        }
+        self.responses_stream_chunks = [
+            b'event: response.created\ndata: {"type":"response.created"}\n\n',
+            b'event: response.completed\ndata: {"type":"response.completed"}\n\n',
+        ]
 
     async def startup(self) -> None:
         return None
@@ -228,6 +242,17 @@ class FakeOllamaGateway:
     ) -> AsyncGenerator[bytes, None]:
         self.last_stream_req = req
         for chunk in self.stream_chunks:
+            yield chunk
+
+    async def responses_create(self, body: dict[str, Any]) -> dict[str, Any]:
+        self.last_responses_body = body
+        return self.responses_response
+
+    async def responses_create_stream(
+        self, body: dict[str, Any]
+    ) -> AsyncGenerator[bytes, None]:
+        self.last_responses_body = body
+        for chunk in self.responses_stream_chunks:
             yield chunk
 
 

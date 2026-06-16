@@ -4,10 +4,20 @@ from typing import Any
 from fastapi.responses import JSONResponse
 
 CHAT_COMPLETIONS_PATH = "/v1/chat/completions"
+RESPONSES_PATH = "/v1/responses"
+OPENAI_COMPAT_PATHS = frozenset({CHAT_COMPLETIONS_PATH, RESPONSES_PATH})
 
 
 def is_chat_completions_path(path: str) -> bool:
     return path == CHAT_COMPLETIONS_PATH
+
+
+def is_responses_path(path: str) -> bool:
+    return path == RESPONSES_PATH
+
+
+def is_openai_compatible_path(path: str) -> bool:
+    return path in OPENAI_COMPAT_PATHS
 
 
 def make_openai_error_body(

@@ -47,6 +47,18 @@ class ServiceUnavailableError(AppError):
         )
 
 
+class StatefulResponsesNotSupportedError(AppError):
+    def __init__(
+        self,
+        message: str = "Stateful responses are not supported. Omit previous_response_id.",
+    ):
+        super().__init__(
+            message=message,
+            status_code=400,
+            code="previous_response_not_found",
+        )
+
+
 class AdminBusinessError(AppError):
     """Admin 業務錯誤（REST 風格）。"""
 

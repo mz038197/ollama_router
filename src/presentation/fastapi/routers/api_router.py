@@ -1,9 +1,11 @@
+from typing import Any
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.application.dto.chat_dto import ChatCompletionInputDto
 from src.application.use_cases.api_use_case import ApiUseCase
-from src.domain.errors import AuthenticationError, UpstreamServiceError, ServiceUnavailableError
+from src.domain.errors import AuthenticationError, ServiceUnavailableError, UpstreamServiceError
 from src.presentation.fastapi.openai_errors import openai_error_response, openai_stream_error_bytes
 from src.presentation.fastapi.schemas.api import ChatCompletionsRequestSchema
 
@@ -12,6 +14,13 @@ def _client_ip(request: Request) -> str | None:
     if request.client is None:
         return None
     return request.client.host
+
+
+def _extract_api_key(request: Request) -> str | None:
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header[7:]
+    return request.headers.get("X-API-Key")
 
 
 def create_api_router(api_use_case: ApiUseCase) -> APIRouter:
@@ -37,13 +46,22 @@ def create_api_router(api_use_case: ApiUseCase) -> APIRouter:
         except Exception as e:
             yield openai_stream_error_bytes(str(e), error_type="server_error")
 
+    async def _responses_stream_with_error_handling(body: dict[str, Any], api_key, client_ip):
+        try:
+            async for chunk in api_use_case.responses_create_stream(body, api_key, client_ip):
+                yield chunk
+        except UpstreamServiceError as e:
+            yield openai_stream_error_bytes(e.message, error_type="server_error")
+        except ServiceUnavailableError as e:
+            yield openai_stream_error_bytes(e.message, error_type="server_error")
+        except Exception as e:
+            yield openai_stream_error_bytes(str(e), error_type="server_error")
+
     @router.post("/v1/chat/completions")
     async def chat_completions(req: ChatCompletionsRequestSchema, request: Request):
-        auth_header = request.headers.get("Authorization", "")
-        api_key = auth_header[7:] if auth_header.startswith("Bearer ") else request.headers.get("X-API-Key")
+        api_key = _extract_api_key(request)
         client_ip = _client_ip(request)
 
-        # 處理失敗的驗證並記錄到審計追蹤
         if getattr(request.state, "invalid_api_key", False):
             api_use_case.log_invalid_auth(api_key or "", client_ip)
             err = AuthenticationError()
@@ -72,6 +90,31 @@ def create_api_router(api_use_case: ApiUseCase) -> APIRouter:
             return StreamingResponse(generator, media_type="text/event-stream")
 
         data = await api_use_case.chat_nonstream(domain_req, api_key, client_ip)
+        return JSONResponse(content=data)
+
+    @router.post("/v1/responses")
+    async def responses_create(request: Request):
+        api_key = _extract_api_key(request)
+        client_ip = _client_ip(request)
+
+        if getattr(request.state, "invalid_api_key", False):
+            api_use_case.log_invalid_auth(api_key or "", client_ip)
+            err = AuthenticationError()
+            return openai_error_response(
+                err.status_code,
+                err.message,
+                error_type="invalid_request_error",
+                code="invalid_api_key",
+            )
+
+        body: dict[str, Any] = await request.json()
+        api_use_case.validate_responses_request(body)
+
+        if body.get("stream"):
+            generator = _responses_stream_with_error_handling(body, api_key, client_ip)
+            return StreamingResponse(generator, media_type="text/event-stream")
+
+        data = await api_use_case.responses_create(body, api_key, client_ip)
         return JSONResponse(content=data)
 
     return router

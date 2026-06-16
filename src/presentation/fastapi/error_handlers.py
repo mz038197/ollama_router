@@ -6,10 +6,11 @@ from src.domain.errors import (
     AppError,
     AuthenticationError,
     ServiceUnavailableError,
+    StatefulResponsesNotSupportedError,
     UpstreamServiceError,
 )
 from src.presentation.fastapi.openai_errors import (
-    is_chat_completions_path,
+    is_openai_compatible_path,
     make_openai_error_body,
     openai_error_response,
 )
@@ -18,7 +19,7 @@ from src.presentation.fastapi.openai_errors import (
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AuthenticationError)
     async def handle_authentication_error(request: Request, exc: AuthenticationError):
-        if is_chat_completions_path(request.url.path):
+        if is_openai_compatible_path(request.url.path):
             return openai_error_response(
                 exc.status_code,
                 exc.message,
@@ -32,7 +33,7 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(UpstreamServiceError)
     async def handle_upstream_error(request: Request, exc: UpstreamServiceError):
-        if is_chat_completions_path(request.url.path):
+        if is_openai_compatible_path(request.url.path):
             return openai_error_response(
                 exc.status_code,
                 exc.message,
@@ -52,11 +53,26 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ServiceUnavailableError)
     async def handle_service_unavailable(request: Request, exc: ServiceUnavailableError):
-        if is_chat_completions_path(request.url.path):
+        if is_openai_compatible_path(request.url.path):
             return openai_error_response(
                 exc.status_code,
                 exc.message,
                 error_type="server_error",
+            )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.message},
+        )
+
+    @app.exception_handler(StatefulResponsesNotSupportedError)
+    async def handle_stateful_responses_error(request: Request, exc: StatefulResponsesNotSupportedError):
+        if is_openai_compatible_path(request.url.path):
+            return openai_error_response(
+                exc.status_code,
+                exc.message,
+                error_type="invalid_request_error",
+                code=exc.code,
+                param="previous_response_id",
             )
         return JSONResponse(
             status_code=exc.status_code,
@@ -77,7 +93,7 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(AppError)
     async def handle_app_error(request: Request, exc: AppError):
-        if is_chat_completions_path(request.url.path):
+        if is_openai_compatible_path(request.url.path):
             return JSONResponse(
                 status_code=exc.status_code,
                 content=make_openai_error_body(
