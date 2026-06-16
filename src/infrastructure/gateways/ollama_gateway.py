@@ -9,6 +9,7 @@ import httpx
 
 from src.domain.errors import ServiceUnavailableError, UpstreamServiceError
 from src.domain.entities.chat import ChatCompletionRequest, ChatMessage
+from src.infrastructure.gateways.responses_helpers import sanitize_responses_request
 
 
 @dataclass
@@ -185,6 +186,8 @@ class OllamaGateway:
         self.client: httpx.AsyncClient | None = None
         self.lock = asyncio.Lock()
         self.waiting_count = 0
+        self._thinking_cache: dict[tuple[str, str], tuple[bool, float]] = {}
+        self._thinking_cache_ttl = 900.0
 
     async def startup(self) -> None:
         self.client = httpx.AsyncClient(timeout=self.timeout)
@@ -256,6 +259,120 @@ class OllamaGateway:
         if req.tool_choice is not None:
             payload["tool_choice"] = req.tool_choice
         return payload
+
+    async def _model_supports_thinking(self, backend_url: str, model: str) -> bool:
+        cache_key = (backend_url, model)
+        now = time.monotonic()
+        cached = self._thinking_cache.get(cache_key)
+        if cached is not None and cached[1] > now:
+            return cached[0]
+
+        supports = False
+        assert self.client is not None
+        try:
+            response = await self.client.post(
+                f"{backend_url}/api/show",
+                json={"model": model},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                capabilities = data.get("capabilities")
+                if isinstance(capabilities, list):
+                    supports = "thinking" in capabilities
+        except Exception:
+            supports = False
+
+        self._thinking_cache[cache_key] = (supports, now + self._thinking_cache_ttl)
+        return supports
+
+    def _prepare_responses_body(self, body: dict[str, Any], supports_thinking: bool) -> dict[str, Any]:
+        return sanitize_responses_request(body, supports_thinking)
+
+    async def responses_create(self, body: dict[str, Any]) -> dict[str, Any]:
+        async with self.lock:
+            self.waiting_count += 1
+
+        backend = await self._pick_backend()
+        async with self.lock:
+            self.waiting_count -= 1
+
+        model = body.get("model")
+        if not isinstance(model, str) or not model.strip():
+            await self._release_backend(backend, success=False)
+            raise UpstreamServiceError(
+                status_code=400,
+                backend=backend.base_url,
+                body={"error": "model is required"},
+            )
+
+        success = False
+        try:
+            supports_thinking = await self._model_supports_thinking(backend.base_url, model)
+            payload = self._prepare_responses_body(body, supports_thinking)
+            assert self.client is not None
+            response = await self.client.post(
+                f"{backend.base_url}/v1/responses",
+                json=payload,
+            )
+            if response.status_code != 200:
+                raise UpstreamServiceError(
+                    status_code=response.status_code,
+                    backend=backend.base_url,
+                    body=safe_json_or_text(response),
+                )
+            success = True
+            return response.json()
+        finally:
+            await self._release_backend(backend, success=success)
+
+    async def responses_create_stream(self, body: dict[str, Any]) -> AsyncGenerator[bytes, None]:
+        async with self.lock:
+            self.waiting_count += 1
+
+        backend = await self._pick_backend()
+        async with self.lock:
+            self.waiting_count -= 1
+
+        model = body.get("model")
+        if not isinstance(model, str) or not model.strip():
+            await self._release_backend(backend, success=False)
+            raise UpstreamServiceError(
+                status_code=400,
+                backend=backend.base_url,
+                body={"error": "model is required"},
+            )
+
+        success = False
+        released = False
+        try:
+            supports_thinking = await self._model_supports_thinking(backend.base_url, model)
+            payload = dict(self._prepare_responses_body(body, supports_thinking))
+            payload["stream"] = True
+            assert self.client is not None
+            async with self.client.stream(
+                "POST",
+                f"{backend.base_url}/v1/responses",
+                json=payload,
+            ) as response:
+                if response.status_code != 200:
+                    body_bytes = await response.aread()
+                    raise UpstreamServiceError(
+                        status_code=response.status_code,
+                        backend=backend.base_url,
+                        body=body_bytes.decode("utf-8", errors="ignore"),
+                    )
+
+                async for chunk in response.aiter_bytes():
+                    if chunk:
+                        yield chunk
+                success = True
+        except UpstreamServiceError:
+            await self._release_backend(backend, success=False)
+            released = True
+            raise
+        finally:
+            if not released:
+                await self._release_backend(backend, success=success)
 
     async def chat_completions_nonstream(self, req: ChatCompletionRequest) -> dict[str, Any]:
         enqueue_time = time.perf_counter()

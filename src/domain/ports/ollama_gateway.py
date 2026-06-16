@@ -21,3 +21,9 @@ class OllamaGatewayPort(Protocol):
 
     async def chat_completions_stream(self, req: ChatCompletionRequest) -> AsyncGenerator[bytes, None]:
         ...
+
+    async def responses_create(self, body: dict[str, Any]) -> dict[str, Any]:
+        ...
+
+    async def responses_create_stream(self, body: dict[str, Any]) -> AsyncGenerator[bytes, None]:
+        ...
