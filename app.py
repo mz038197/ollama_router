@@ -69,5 +69,5 @@ app.add_middleware(ApiKeyMiddleware, auth_use_case=container.auth_use_case)
 # Routers
 app.include_router(create_api_router(container.api_use_case))
 app.include_router(create_admin_router(container.admin_use_case))
-if container.portal_use_case is not None:
-    app.include_router(create_portal_router(container.portal_use_case))
+if container.portal_use_case is not None and container.router_settings is not None:
+    app.include_router(create_portal_router(container.portal_use_case, container.router_settings))

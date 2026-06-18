@@ -1,10 +1,13 @@
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Cookie, HTTPException, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
 from src.application.use_cases.portal_use_case import PortalUseCase
+from src.infrastructure.auth.google_oauth import GoogleOAuthService
+from src.infrastructure.config import RouterSettings
 
 PORTAL_HTML_PATH = Path(__file__).resolve().parent.parent / "web" / "portal.html"
 
@@ -40,8 +43,14 @@ class SettingsPatchRequest(BaseModel):
     open_registration: bool | None = None
 
 
-def create_portal_router(portal_use_case: PortalUseCase) -> APIRouter:
+def create_portal_router(portal_use_case: PortalUseCase, settings: RouterSettings) -> APIRouter:
     router = APIRouter(tags=["Portal"])
+    oauth = GoogleOAuthService(
+        client_id=settings.auth.google_client_id,
+        client_secret=settings.auth.google_client_secret,
+        redirect_uri=f"{settings.public_url.rstrip('/')}/auth/google/callback",
+        session_secret=settings.auth.session_secret,
+    )
 
     def portal_call(fn):
         try:
@@ -56,14 +65,68 @@ def create_portal_router(portal_use_case: PortalUseCase) -> APIRouter:
             raise HTTPException(status_code=401, detail="尚未登入")
         return int(session_user_id)
 
+    def _set_session(response: Response, user_id: int) -> None:
+        response.set_cookie("session_user_id", str(user_id), httponly=True, samesite="lax")
+
+    def _portal_redirect(error: str | None = None) -> RedirectResponse:
+        target = "/portal"
+        if error:
+            target = f"/portal?login_error={quote(error)}"
+        return RedirectResponse(url=target, status_code=302)
+
     @router.get("/portal", response_class=HTMLResponse)
     async def portal_page():
         return HTMLResponse(PORTAL_HTML_PATH.read_text(encoding="utf-8"))
 
+    @router.get("/auth/config")
+    async def auth_config():
+        return {
+            "oauth_enabled": oauth.is_configured(),
+            "redirect_uri": oauth.redirect_uri if oauth.is_configured() else None,
+        }
+
+    @router.get("/auth/google/login")
+    async def google_login_start():
+        if not oauth.is_configured():
+            raise HTTPException(status_code=503, detail="Google OAuth 尚未設定")
+        state = oauth.create_state()
+        redirect = RedirectResponse(url=oauth.authorize_url(state), status_code=302)
+        redirect.set_cookie("oauth_state", state, httponly=True, samesite="lax", max_age=600)
+        return redirect
+
+    @router.get("/auth/google/callback")
+    async def google_login_callback(
+        response: Response,
+        code: str | None = None,
+        state: str | None = None,
+        error: str | None = None,
+        oauth_state: str | None = Cookie(default=None),
+    ):
+        if error:
+            return _portal_redirect("Google 登入已取消")
+        if not code or not state or not oauth_state:
+            return _portal_redirect("Google 登入參數不完整")
+        if state != oauth_state or not oauth.verify_state(state):
+            return _portal_redirect("Google 登入狀態驗證失敗")
+        try:
+            claims = await oauth.exchange_code(code)
+            user = portal_use_case.google_login(claims.email, claims.name, claims.google_sub)
+        except ValueError as exc:
+            return _portal_redirect(str(exc))
+        except Exception:
+            return _portal_redirect("Google 登入失敗，請稍後再試")
+
+        redirect = _portal_redirect()
+        redirect.delete_cookie("oauth_state")
+        _set_session(redirect, user["id"])
+        return redirect
+
     @router.post("/auth/google")
-    async def google_login(data: GoogleLoginRequest, response: Response):
+    async def google_login_dev(data: GoogleLoginRequest, response: Response):
+        if oauth.is_configured():
+            raise HTTPException(status_code=403, detail="請使用 Google OAuth 登入")
         user = portal_use_case.google_login(data.email, data.name, data.google_sub)
-        response.set_cookie("session_user_id", str(user["id"]), httponly=True, samesite="lax")
+        _set_session(response, user["id"])
         return {"user": user}
 
     @router.get("/auth/me")

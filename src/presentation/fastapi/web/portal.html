@@ -15,6 +15,10 @@
     th, td { text-align: left; border-bottom: 1px solid #e4e7eb; padding: 8px; vertical-align: top; }
     .tabs button { background: #e9eef4; color: #17324d; }
     .hidden { display: none; }
+    .error { color: #b42318; background: #fef3f2; border: 1px solid #fecdca; border-radius: 6px; padding: 10px 12px; margin: 8px 0; }
+    .oauth-btn { display: inline-block; background: white; color: #17202a; border: 1px solid #d8dee6; padding: 10px 16px; border-radius: 6px; text-decoration: none; font-weight: 600; }
+    .oauth-btn:hover { background: #f6f7f9; }
+    .dev-note { color: #5d6d7e; font-size: 0.92rem; margin-top: 8px; }
     pre { white-space: pre-wrap; background: #101820; color: #d7f5e9; padding: 12px; border-radius: 6px; }
   </style>
 </head>
@@ -23,9 +27,16 @@
   <main>
     <section id="login">
       <h2>Google 登入</h2>
-      <input id="email" placeholder="Gmail" />
-      <input id="name" placeholder="姓名" />
-      <button onclick="login()">登入</button>
+      <div id="loginError" class="error hidden"></div>
+      <div id="oauthLogin" class="hidden">
+        <a class="oauth-btn" href="/auth/google/login">使用 Google 帳號登入</a>
+      </div>
+      <div id="devLogin" class="hidden">
+        <input id="email" placeholder="Gmail" />
+        <input id="displayName" placeholder="姓名" />
+        <button onclick="login()">開發模式登入</button>
+        <p class="dev-note">僅在未設定 Google OAuth 時可用，請勿在正式環境使用。</p>
+      </div>
     </section>
 
     <section id="profile" class="hidden">
@@ -88,13 +99,33 @@ OPENAI_API_KEY=or_sk_xxx</pre>
   </main>
   <script>
     let currentRole = 'student';
+    function showLoginError(message) {
+      const box = document.getElementById('loginError');
+      if (!message) {
+        box.classList.add('hidden');
+        box.textContent = '';
+        return;
+      }
+      box.textContent = message;
+      box.classList.remove('hidden');
+    }
     async function api(url, options = {}) {
       const r = await fetch(url, {headers: {'content-type': 'application/json'}, ...options});
       if (!r.ok) throw new Error(await r.text());
       return r.json();
     }
+    async function initLogin() {
+      const params = new URLSearchParams(location.search);
+      showLoginError(params.get('login_error'));
+      const config = await api('/auth/config');
+      document.getElementById('oauthLogin').classList.toggle('hidden', !config.oauth_enabled);
+      document.getElementById('devLogin').classList.toggle('hidden', config.oauth_enabled);
+    }
     async function login() {
-      await api('/auth/google', {method:'POST', body: JSON.stringify({email: email.value, name: name.value})});
+      await api('/auth/google', {method:'POST', body: JSON.stringify({
+        email: document.getElementById('email').value,
+        name: document.getElementById('displayName').value,
+      })});
       await refresh();
     }
     async function logout() { await api('/auth/logout', {method:'POST'}); location.reload(); }
@@ -150,6 +181,7 @@ OPENAI_API_KEY=or_sk_xxx</pre>
       };
       admin.innerHTML = `<pre>${JSON.stringify(await api('/admin/settings', {method:'PATCH', body: JSON.stringify(body)}), null, 2)}</pre>`;
     }
+    initLogin().catch(() => {});
     refresh().catch(() => {});
   </script>
 </body>

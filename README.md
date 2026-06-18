@@ -37,6 +37,9 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
 - `POST /api/admin/key/status`
 - `POST /api/admin/key/delete`
 - `GET /portal`
+- `GET /auth/config`
+- `GET /auth/google/login`
+- `GET /auth/google/callback`
 - `POST /auth/google`
 - `GET /auth/me`
 - `POST /sessions/redeem`
@@ -94,7 +97,8 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
 
 ## Pegasi Portal MVP
 
-- Google 登入開發端點：`POST /auth/google`，傳入 `email`、`name` 後建立 HTTP-only session cookie。正式 OAuth client 設定由 `router.yaml` 保留。
+- Google OAuth 登入：`GET /auth/google/login` 導向 Google 授權頁，完成後由 `GET /auth/google/callback` 驗證 `id_token` 並建立 HTTP-only session cookie。請在 `router.yaml` 設定 `google_client_id`、`google_client_secret`，並於 Google Cloud Console 註冊 redirect URI：`{public_url}/auth/google/callback`。
+- 開發模式：若未設定 Google OAuth，`POST /auth/google` 仍可手動傳入 `email`、`name` 登入（僅供本機測試，正式環境請務必設定 OAuth）。
 - Role 指派：`auth.teacher_domain` 的信箱為 teacher；`auth.admin_emails` 為 admin teacher。
 - Student：登入 `/portal` 後輸入老師提供的本節邀請碼，取得個人 `or_sk_...` API Key。
 - Teacher/Admin：可建立班級、開本節 session、查看領取名單與 prompt logs。Admin 另可看使用者、全系統班級與設定摘要。

@@ -11,6 +11,9 @@ class PortalUseCase:
         self.settings = settings
 
     def google_login(self, email: str, name: str, google_sub: str | None = None) -> dict[str, Any]:
+        existing = self.repo.get_user_by_email(email)
+        if not existing and not self.settings.auth.open_registration:
+            raise ValueError("尚未開放註冊")
         return self.repo.upsert_google_user(email=email, name=name, google_sub=google_sub)
 
     def me(self, user_id: int) -> dict[str, Any] | None:

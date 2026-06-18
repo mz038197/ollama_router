@@ -21,3 +21,4 @@ class AppContainer:
     portal_use_case: PortalUseCase | None = None
     archive_repo: Any | None = None
     prompt_log_retention_days: int = 30
+    router_settings: Any | None = None

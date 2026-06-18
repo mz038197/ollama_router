@@ -10,6 +10,12 @@ auth:
   session_secret: "change-me"
   open_registration: true
 
+# Google OAuth 設定說明：
+# 1. 到 Google Cloud Console 建立 OAuth 2.0 Client（Web application）
+# 2. Authorized redirect URI 必須與 public_url 一致：
+#    {public_url}/auth/google/callback
+# 3. 填入 google_client_id / google_client_secret 後，Portal 會改用正式 Google 登入
+
 database:
   path: "~/.ollama_router/router.db"
   archive_dir: "~/.ollama_router/archive"

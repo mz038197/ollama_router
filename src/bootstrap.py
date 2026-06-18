@@ -54,4 +54,5 @@ def build_container(
         portal_use_case=portal_use_case,
         archive_repo=api_key_repo if isinstance(api_key_repo, SqliteRouterRepository) else None,
         prompt_log_retention_days=settings.prompt_logs.retention_days,
+        router_settings=settings,
     )

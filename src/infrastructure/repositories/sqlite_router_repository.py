@@ -147,6 +147,11 @@ class SqliteRouterRepository:
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
             return dict(row) if row else None
 
+    def get_user_by_email(self, email: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM users WHERE email = ?", (email.lower(),)).fetchone()
+            return dict(row) if row else None
+
     def list_users(self) -> list[dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute("SELECT id, email, name, role, status, created_at FROM users ORDER BY created_at DESC").fetchall()
