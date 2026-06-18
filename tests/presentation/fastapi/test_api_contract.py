@@ -35,12 +35,31 @@ def test_health_endpoint_contract(fake_repo, fake_gateway, fake_logger):
 
 def test_models_endpoint_contract(fake_repo, fake_gateway, fake_logger):
     client = build_test_client(fake_repo, fake_gateway, fake_logger)
-    response = client.get("/v1/models")
+    response = client.get("/v1/models", headers={"Authorization": "Bearer valid-key"})
     assert response.status_code == 200
     payload = response.json()
     assert payload["object"] == "list"
     assert isinstance(payload["data"], list)
     assert payload["data"][0]["id"] == "fake-model"
+
+
+def test_models_endpoint_rejects_when_api_key_missing(fake_repo, fake_gateway, fake_logger):
+    client = build_test_client(fake_repo, fake_gateway, fake_logger)
+    response = client.get("/v1/models")
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "invalid_api_key"
+
+
+def test_models_endpoint_allows_missing_api_key_when_key_system_disabled(fake_gateway, fake_logger):
+    from tests.conftest import FakeApiKeyRepository
+
+    disabled_repo = FakeApiKeyRepository(config_data={}, force_enabled=False)
+    client = build_test_client(disabled_repo, fake_gateway, fake_logger)
+
+    response = client.get("/v1/models")
+
+    assert response.status_code == 200
+    assert response.json()["object"] == "list"
 
 
 def test_chat_completion_rejects_when_api_key_missing(fake_repo, fake_gateway, fake_logger):

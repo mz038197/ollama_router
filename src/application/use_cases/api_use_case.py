@@ -1,6 +1,7 @@
 from typing import Any, AsyncGenerator
 
 from src.domain.errors import StatefulResponsesNotSupportedError
+from src.domain.entities.auth import AuthContext
 from src.domain.entities.chat import ChatCompletionRequest, ChatMessage
 from src.domain.ports.api_key_repository import ApiKeyRepositoryPort
 from src.domain.ports.ollama_gateway import OllamaGatewayPort
@@ -26,15 +27,23 @@ class ApiUseCase:
         return await self.gateway.models()
 
     async def chat_nonstream(
-        self, req: ChatCompletionRequest, api_key: str | None, client_ip: str | None = None
+        self,
+        req: ChatCompletionRequest,
+        api_key: str | None,
+        client_ip: str | None = None,
+        auth_context: AuthContext | None = None,
     ) -> dict[str, Any]:
-        self._log_request(req, api_key, client_ip)
+        self._log_request(req, api_key, client_ip, auth_context)
         return await self.gateway.chat_completions_nonstream(req)
 
     async def chat_stream(
-        self, req: ChatCompletionRequest, api_key: str | None, client_ip: str | None = None
+        self,
+        req: ChatCompletionRequest,
+        api_key: str | None,
+        client_ip: str | None = None,
+        auth_context: AuthContext | None = None,
     ) -> AsyncGenerator[bytes, None]:
-        self._log_request(req, api_key, client_ip)
+        self._log_request(req, api_key, client_ip, auth_context)
         async for chunk in self.gateway.chat_completions_stream(req):
             yield chunk
 
@@ -84,23 +93,45 @@ class ApiUseCase:
         )
 
     def _log_request(
-        self, req: ChatCompletionRequest, api_key: str | None, client_ip: str | None = None
+        self,
+        req: ChatCompletionRequest,
+        api_key: str | None,
+        client_ip: str | None = None,
+        auth_context: AuthContext | None = None,
     ) -> None:
         api_key_value = api_key or ""
         teacher_name: str | None = None
         is_valid = True
 
         if self.api_key_repo.is_enabled():
-            is_valid, teacher_name = self.api_key_repo.verify_api_key(api_key_value)
+            if auth_context is None and hasattr(self.api_key_repo, "verify_api_key_context"):
+                auth_context = self.api_key_repo.verify_api_key_context(api_key_value)
+                is_valid = auth_context is not None
+            else:
+                is_valid, teacher_name = self.api_key_repo.verify_api_key(api_key_value)
+        if auth_context is not None:
+            teacher_name = auth_context.teacher_name
+
+        messages = [_message_to_log_dict(m) for m in req.messages]
 
         self.logger.log_validation_result(
             teacher_name=teacher_name,
             api_key=api_key or "未提供",
             model=req.model,
-            messages=[_message_to_log_dict(m) for m in req.messages],
+            messages=messages,
             is_valid=is_valid,
             client_ip=client_ip,
         )
+        if hasattr(self.api_key_repo, "log_prompt"):
+            raw_prompt = _messages_to_text(messages)
+            self.api_key_repo.log_prompt(
+                auth=auth_context,
+                raw_prompt=raw_prompt,
+                final_prompt=raw_prompt,
+                model=req.model,
+                status="ok" if is_valid else "rejected",
+                client_ip=client_ip,
+            )
 
     def log_invalid_auth(self, api_key: str, client_ip: str | None = None) -> None:
         """記錄無效的認證嘗試，供安全審計追蹤。"""
@@ -129,3 +160,10 @@ def _message_to_log_dict(m: ChatMessage) -> dict[str, Any]:
     if m.tool_name:
         d["tool_name"] = m.tool_name
     return d
+
+
+def _messages_to_text(messages: list[dict[str, Any]]) -> str:
+    parts = []
+    for message in messages:
+        parts.append(f"{message.get('role', '')}: {message.get('content', '')}")
+    return "\n".join(parts)

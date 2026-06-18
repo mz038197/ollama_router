@@ -1,0 +1,18 @@
+public_url: "http://127.0.0.1:8000"
+student_default_ttl_hours: 2
+
+auth:
+  teacher_domain: "school.edu"
+  admin_emails:
+    - "admin@school.edu"
+  google_client_id: ""
+  google_client_secret: ""
+  session_secret: "change-me"
+  open_registration: true
+
+database:
+  path: "~/.ollama_router/router.db"
+  archive_dir: "~/.ollama_router/archive"
+
+prompt_logs:
+  retention_days: 30

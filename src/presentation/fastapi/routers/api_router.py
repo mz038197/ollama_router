@@ -34,10 +34,10 @@ def create_api_router(api_use_case: ApiUseCase) -> APIRouter:
     async def list_models():
         return await api_use_case.models()
 
-    async def _stream_with_error_handling(domain_req, api_key, client_ip):
+    async def _stream_with_error_handling(domain_req, api_key, client_ip, auth_context):
         """包含錯誤處理的流式生成器"""
         try:
-            async for chunk in api_use_case.chat_stream(domain_req, api_key, client_ip):
+            async for chunk in api_use_case.chat_stream(domain_req, api_key, client_ip, auth_context):
                 yield chunk
         except UpstreamServiceError as e:
             yield openai_stream_error_bytes(e.message, error_type="server_error")
@@ -61,6 +61,7 @@ def create_api_router(api_use_case: ApiUseCase) -> APIRouter:
     async def chat_completions(req: ChatCompletionsRequestSchema, request: Request):
         api_key = _extract_api_key(request)
         client_ip = _client_ip(request)
+        auth_context = getattr(request.state, "auth_context", None)
 
         if getattr(request.state, "invalid_api_key", False):
             api_use_case.log_invalid_auth(api_key or "", client_ip)
@@ -86,10 +87,10 @@ def create_api_router(api_use_case: ApiUseCase) -> APIRouter:
         domain_req = input_dto.to_domain()
 
         if domain_req.stream:
-            generator = _stream_with_error_handling(domain_req, api_key, client_ip)
+            generator = _stream_with_error_handling(domain_req, api_key, client_ip, auth_context)
             return StreamingResponse(generator, media_type="text/event-stream")
 
-        data = await api_use_case.chat_nonstream(domain_req, api_key, client_ip)
+        data = await api_use_case.chat_nonstream(domain_req, api_key, client_ip, auth_context)
         return JSONResponse(content=data)
 
     @router.post("/v1/responses")

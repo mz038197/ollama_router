@@ -10,6 +10,16 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
 管理面板：`http://localhost:8000/`
+Portal：`http://localhost:8000/portal`
+
+使用自訂設定檔：
+
+```powershell
+$env:OLLAMA_ROUTER_CONFIG="D:\path\router.yaml"
+uv run uvicorn app:app --host 0.0.0.0 --port 8000
+```
+
+範本見 [`config/router.example.yaml`](config/router.example.yaml)。
 
 ## API 端點
 
@@ -26,6 +36,16 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
 - `POST /api/admin/key/add`
 - `POST /api/admin/key/status`
 - `POST /api/admin/key/delete`
+- `GET /portal`
+- `POST /auth/google`
+- `GET /auth/me`
+- `POST /sessions/redeem`
+- `POST /teacher/classes`
+- `POST /teacher/classes/{id}/sessions`
+- `GET /teacher/classes/{id}/prompt-logs`
+- `GET /admin/users`
+- `GET /admin/classes`
+- `GET /admin/settings`
 
 ### Admin API 狀態碼（REST）
 
@@ -61,15 +81,27 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
 
 ## API 金鑰驗證
 
-- 驗證路徑：`/v1/chat/completions`、`/v1/responses`
+- 驗證路徑：所有 `/v1/*`，包含 `/v1/models`、`/v1/chat/completions`、`/v1/responses`
 - 讀取順序：
   1. `Authorization: Bearer <token>`
   2. `X-API-Key: <token>`
 - 驗證規則：
-  - 若未配置任何金鑰：允許所有請求
-  - 若已配置金鑰：需提供有效且 `enabled=true` 的 key，否則回傳 `401`
+  - 需提供有效且 `enabled=true` 的 key，否則回傳 `401`
+  - Student key 需綁定有效上課 session，session 或班級過期後會失效
+  - Teacher/Admin key 為長期 key，可由 Portal 手動重設
 
-配置檔路徑：`~/.ollama_router/apikeyConfig.json`
+新 Portal 使用 SQLite：預設 `~/.ollama_router/router.db`。Legacy admin.html 仍保留舊 JSON 維運：`~/.ollama_router/apikeyConfig.json`。
+
+## Pegasi Portal MVP
+
+- Google 登入開發端點：`POST /auth/google`，傳入 `email`、`name` 後建立 HTTP-only session cookie。正式 OAuth client 設定由 `router.yaml` 保留。
+- Role 指派：`auth.teacher_domain` 的信箱為 teacher；`auth.admin_emails` 為 admin teacher。
+- Student：登入 `/portal` 後輸入老師提供的本節邀請碼，取得個人 `or_sk_...` API Key。
+- Teacher/Admin：可建立班級、開本節 session、查看領取名單與 prompt logs。Admin 另可看使用者、全系統班級與設定摘要。
+- 每筆 `/v1/chat/completions` 會寫入 SQLite `prompt_logs`，含 `user_id`、`class_id`、`session_id`、`raw_prompt`、`model`、`client_ip`。
+- Prompt 監控支援班級、session、關鍵字與 ISO 時間範圍篩選。
+- Admin 可停用/啟用使用者、調整 role、結束班級、觸發 prompt log 封存，並可寫回非機密設定：`prompt_logs.retention_days`、`student_default_ttl_hours`、`auth.open_registration`。
+- 封存會將 ended 班級或超過 retention 的 `prompt_logs` 搬至 `archive_YYYY.db`，並由每日背景工作定期執行。
 
 ### Chat Completions 錯誤回應
 
